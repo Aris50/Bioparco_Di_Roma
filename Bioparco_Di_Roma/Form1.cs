@@ -138,6 +138,153 @@ namespace Bioparco_Di_Roma
 
         private void BtnAddChild_Click(object sender, EventArgs e)
         {
+            // Show selection dialog
+            using (Form selectionForm = new Form())
+            {
+                selectionForm.Text = "Select Operation";
+                selectionForm.Size = new System.Drawing.Size(300, 150);
+                selectionForm.StartPosition = FormStartPosition.CenterParent;
+
+                Label lblSelect = new Label { Text = "Select table to add to:", Location = new System.Drawing.Point(20, 20), AutoSize = true };
+                ComboBox cmbTable = new ComboBox { Location = new System.Drawing.Point(20, 50), Width = 240 };
+                cmbTable.Items.AddRange(new string[] { "Animals", "Habitats" });
+
+                Button btnProceed = new Button { Text = "Proceed", Location = new System.Drawing.Point(100, 80), DialogResult = DialogResult.OK };
+                Button btnCancel = new Button { Text = "Cancel", Location = new System.Drawing.Point(200, 80), DialogResult = DialogResult.Cancel };
+
+                selectionForm.Controls.AddRange(new Control[] { lblSelect, cmbTable, btnProceed, btnCancel });
+
+                if (selectionForm.ShowDialog() == DialogResult.OK)
+                {
+                    if (cmbTable.SelectedItem.ToString() == "Animals")
+                    {
+                        AddAnimal();
+                    }
+                    else
+                    {
+                        AddHabitat();
+                    }
+                }
+            }
+        }
+
+        private bool ValidateAnimalFields(TextBox txtAid, TextBox txtName, TextBox txtSpecies, TextBox txtAge, 
+            ComboBox cmbGender, ComboBox cmbVertebrateClass, TextBox txtBodyTemperature, 
+            TextBox txtWeight, TextBox txtVid, out string errorMessage)
+        {
+            errorMessage = string.Empty;
+
+            // Validate Animal ID
+            if (!int.TryParse(txtAid.Text, out int aid) || aid <= 0)
+            {
+                errorMessage = "Animal ID must be a positive number.";
+                return false;
+            }
+
+            // Validate Name
+            if (string.IsNullOrWhiteSpace(txtName.Text))
+            {
+                errorMessage = "Name is required.";
+                return false;
+            }
+
+            // Validate Species
+            if (string.IsNullOrWhiteSpace(txtSpecies.Text))
+            {
+                errorMessage = "Species is required.";
+                return false;
+            }
+
+            // Validate Age
+            if (!int.TryParse(txtAge.Text, out int age) || age < 0 || age > 100)
+            {
+                errorMessage = "Age must be a number between 0 and 100.";
+                return false;
+            }
+
+            // Validate Gender
+            if (cmbGender.SelectedItem == null)
+            {
+                errorMessage = "Gender must be selected.";
+                return false;
+            }
+
+            // Validate Vertebrate Class
+            if (cmbVertebrateClass.SelectedItem == null)
+            {
+                errorMessage = "Vertebrate Class must be selected.";
+                return false;
+            }
+
+            // Validate Body Temperature
+            if (!double.TryParse(txtBodyTemperature.Text, out double temperature) || temperature < 0 || temperature > 50)
+            {
+                errorMessage = "Body Temperature must be a number between 0 and 50.";
+                return false;
+            }
+
+            // Validate Weight
+            if (!double.TryParse(txtWeight.Text, out double weight) || weight <= 0)
+            {
+                errorMessage = "Weight must be a positive number.";
+                return false;
+            }
+
+            // Validate Vet ID
+            if (!int.TryParse(txtVid.Text, out int vid) || vid <= 0)
+            {
+                errorMessage = "Vet ID must be a positive number.";
+                return false;
+            }
+
+            return true;
+        }
+
+        private bool ValidateHabitatFields(TextBox txtHid, TextBox txtLandscape, TextBox txtSize, 
+            TextBox txtTemperature, TextBox txtHumidity, out string errorMessage)
+        {
+            errorMessage = string.Empty;
+
+            // Validate Habitat ID
+            if (!int.TryParse(txtHid.Text, out int hid) || hid <= 0)
+            {
+                errorMessage = "Habitat ID must be a positive number.";
+                return false;
+            }
+
+            // Validate Landscape
+            if (string.IsNullOrWhiteSpace(txtLandscape.Text))
+            {
+                errorMessage = "Landscape is required.";
+                return false;
+            }
+
+            // Validate Size
+            if (!double.TryParse(txtSize.Text, out double size) || size <= 0)
+            {
+                errorMessage = "Size must be a positive number.";
+                return false;
+            }
+
+            // Validate Temperature
+            if (!double.TryParse(txtTemperature.Text, out double temperature) || temperature < -50 || temperature > 50)
+            {
+                errorMessage = "Temperature must be a number between -50 and 50.";
+                return false;
+            }
+
+            // Validate Humidity
+            if (!double.TryParse(txtHumidity.Text, out double humidity) || humidity < 0 || humidity > 100)
+            {
+                errorMessage = "Humidity must be a number between 0 and 100.";
+                return false;
+            }
+
+            return true;
+        }
+
+        private void AddAnimal()
+        {
             if (parentDataGridView.CurrentRow == null)
             {
                 MessageBox.Show("Please select a habitat first.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -232,6 +379,14 @@ namespace Bioparco_Di_Roma
 
                     if (inputForm.ShowDialog() == DialogResult.OK)
                     {
+                        // Validate fields
+                        if (!ValidateAnimalFields(txtAid, txtName, txtSpecies, txtAge, cmbGender, 
+                            cmbVertebrateClass, txtBodyTemperature, txtWeight, txtVid, out string errorMessage))
+                        {
+                            MessageBox.Show(errorMessage, "Validation Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                            return;
+                        }
+
                         // Create new animal row
                         DataRow newAnimalRow = dataSet.Tables[childTableName].NewRow();
                         newAnimalRow["aid"] = Convert.ToInt32(txtAid.Text);
@@ -256,7 +411,124 @@ namespace Bioparco_Di_Roma
             }
         }
 
+        private void AddHabitat()
+        {
+            try
+            {
+                // Create input form
+                using (Form inputForm = new Form())
+                {
+                    inputForm.Text = "Add New Habitat";
+                    inputForm.Size = new System.Drawing.Size(400, 300);
+                    inputForm.StartPosition = FormStartPosition.CenterParent;
+
+                    // Create input controls with mock data
+                    int yPos = 20;
+                    int labelWidth = 120;
+                    int textBoxWidth = 200;
+                    int spacing = 40;
+
+                    // Habitat ID
+                    Label lblHid = new Label { Text = "Habitat ID:", Location = new System.Drawing.Point(20, yPos), Width = labelWidth };
+                    TextBox txtHid = new TextBox { Location = new System.Drawing.Point(150, yPos), Width = textBoxWidth, Text = "1" };
+                    yPos += spacing;
+
+                    // Landscape
+                    Label lblLandscape = new Label { Text = "Landscape:", Location = new System.Drawing.Point(20, yPos), Width = labelWidth };
+                    TextBox txtLandscape = new TextBox { Location = new System.Drawing.Point(150, yPos), Width = textBoxWidth, Text = "Savannah" };
+                    yPos += spacing;
+
+                    // Size
+                    Label lblSize = new Label { Text = "Size:", Location = new System.Drawing.Point(20, yPos), Width = labelWidth };
+                    TextBox txtSize = new TextBox { Location = new System.Drawing.Point(150, yPos), Width = textBoxWidth, Text = "1000" };
+                    yPos += spacing;
+
+                    // Temperature
+                    Label lblTemperature = new Label { Text = "Temperature:", Location = new System.Drawing.Point(20, yPos), Width = labelWidth };
+                    TextBox txtTemperature = new TextBox { Location = new System.Drawing.Point(150, yPos), Width = textBoxWidth, Text = "25.5" };
+                    yPos += spacing;
+
+                    // Humidity
+                    Label lblHumidity = new Label { Text = "Humidity:", Location = new System.Drawing.Point(20, yPos), Width = labelWidth };
+                    TextBox txtHumidity = new TextBox { Location = new System.Drawing.Point(150, yPos), Width = textBoxWidth, Text = "60.0" };
+                    yPos += spacing;
+
+                    // Buttons
+                    Button btnSubmit = new Button { Text = "Add Habitat", Location = new System.Drawing.Point(150, yPos), DialogResult = DialogResult.OK };
+                    Button btnCancel = new Button { Text = "Cancel", Location = new System.Drawing.Point(250, yPos), DialogResult = DialogResult.Cancel };
+
+                    // Add controls to form
+                    inputForm.Controls.AddRange(new Control[] {
+                        lblHid, txtHid,
+                        lblLandscape, txtLandscape,
+                        lblSize, txtSize,
+                        lblTemperature, txtTemperature,
+                        lblHumidity, txtHumidity,
+                        btnSubmit, btnCancel
+                    });
+
+                    if (inputForm.ShowDialog() == DialogResult.OK)
+                    {
+                        // Validate fields
+                        if (!ValidateHabitatFields(txtHid, txtLandscape, txtSize, txtTemperature, 
+                            txtHumidity, out string errorMessage))
+                        {
+                            MessageBox.Show(errorMessage, "Validation Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                            return;
+                        }
+
+                        // Create new habitat row
+                        DataRow newHabitatRow = dataSet.Tables[parentTableName].NewRow();
+                        newHabitatRow["hid"] = Convert.ToInt32(txtHid.Text);
+                        newHabitatRow["landscape"] = txtLandscape.Text;
+                        newHabitatRow["size"] = Convert.ToDouble(txtSize.Text);
+                        newHabitatRow["temperature"] = Convert.ToDouble(txtTemperature.Text);
+                        newHabitatRow["humidity"] = Convert.ToDouble(txtHumidity.Text);
+
+                        dataSet.Tables[parentTableName].Rows.Add(newHabitatRow);
+                        SaveChanges();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error adding habitat: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
         private void BtnEditChild_Click(object sender, EventArgs e)
+        {
+            // Show selection dialog
+            using (Form selectionForm = new Form())
+            {
+                selectionForm.Text = "Select Operation";
+                selectionForm.Size = new System.Drawing.Size(300, 150);
+                selectionForm.StartPosition = FormStartPosition.CenterParent;
+
+                Label lblSelect = new Label { Text = "Select table to edit:", Location = new System.Drawing.Point(20, 20), AutoSize = true };
+                ComboBox cmbTable = new ComboBox { Location = new System.Drawing.Point(20, 50), Width = 240 };
+                cmbTable.Items.AddRange(new string[] { "Animals", "Habitats" });
+
+                Button btnProceed = new Button { Text = "Proceed", Location = new System.Drawing.Point(100, 80), DialogResult = DialogResult.OK };
+                Button btnCancel = new Button { Text = "Cancel", Location = new System.Drawing.Point(200, 80), DialogResult = DialogResult.Cancel };
+
+                selectionForm.Controls.AddRange(new Control[] { lblSelect, cmbTable, btnProceed, btnCancel });
+
+                if (selectionForm.ShowDialog() == DialogResult.OK)
+                {
+                    if (cmbTable.SelectedItem.ToString() == "Animals")
+                    {
+                        EditAnimal();
+                    }
+                    else
+                    {
+                        EditHabitat();
+                    }
+                }
+            }
+        }
+
+        private void EditAnimal()
         {
             if (childDataGridView.CurrentRow == null)
             {
@@ -374,7 +646,125 @@ namespace Bioparco_Di_Roma
             }
         }
 
+        private void EditHabitat()
+        {
+            if (parentDataGridView.CurrentRow == null)
+            {
+                MessageBox.Show("Please select a habitat to edit.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            try
+            {
+                // Get the selected habitat's DataRow
+                DataRowView habitatRowView = (DataRowView)parentDataGridView.CurrentRow.DataBoundItem;
+                DataRow habitatRow = habitatRowView.Row;
+
+                // Create input form
+                using (Form inputForm = new Form())
+                {
+                    inputForm.Text = "Edit Habitat";
+                    inputForm.Size = new System.Drawing.Size(400, 300);
+                    inputForm.StartPosition = FormStartPosition.CenterParent;
+
+                    // Create input controls with current data
+                    int yPos = 20;
+                    int labelWidth = 120;
+                    int textBoxWidth = 200;
+                    int spacing = 40;
+
+                    // Habitat ID (read-only)
+                    Label lblHid = new Label { Text = "Habitat ID:", Location = new System.Drawing.Point(20, yPos), Width = labelWidth };
+                    TextBox txtHid = new TextBox { Location = new System.Drawing.Point(150, yPos), Width = textBoxWidth, Text = habitatRow["hid"].ToString(), Enabled = false };
+                    yPos += spacing;
+
+                    // Landscape
+                    Label lblLandscape = new Label { Text = "Landscape:", Location = new System.Drawing.Point(20, yPos), Width = labelWidth };
+                    TextBox txtLandscape = new TextBox { Location = new System.Drawing.Point(150, yPos), Width = textBoxWidth, Text = habitatRow["landscape"].ToString() };
+                    yPos += spacing;
+
+                    // Size
+                    Label lblSize = new Label { Text = "Size:", Location = new System.Drawing.Point(20, yPos), Width = labelWidth };
+                    TextBox txtSize = new TextBox { Location = new System.Drawing.Point(150, yPos), Width = textBoxWidth, Text = habitatRow["size"].ToString() };
+                    yPos += spacing;
+
+                    // Temperature
+                    Label lblTemperature = new Label { Text = "Temperature:", Location = new System.Drawing.Point(20, yPos), Width = labelWidth };
+                    TextBox txtTemperature = new TextBox { Location = new System.Drawing.Point(150, yPos), Width = textBoxWidth, Text = habitatRow["temperature"].ToString() };
+                    yPos += spacing;
+
+                    // Humidity
+                    Label lblHumidity = new Label { Text = "Humidity:", Location = new System.Drawing.Point(20, yPos), Width = labelWidth };
+                    TextBox txtHumidity = new TextBox { Location = new System.Drawing.Point(150, yPos), Width = textBoxWidth, Text = habitatRow["humidity"].ToString() };
+                    yPos += spacing;
+
+                    // Buttons
+                    Button btnSubmit = new Button { Text = "Save Changes", Location = new System.Drawing.Point(150, yPos), DialogResult = DialogResult.OK };
+                    Button btnCancel = new Button { Text = "Cancel", Location = new System.Drawing.Point(250, yPos), DialogResult = DialogResult.Cancel };
+
+                    // Add controls to form
+                    inputForm.Controls.AddRange(new Control[] {
+                        lblHid, txtHid,
+                        lblLandscape, txtLandscape,
+                        lblSize, txtSize,
+                        lblTemperature, txtTemperature,
+                        lblHumidity, txtHumidity,
+                        btnSubmit, btnCancel
+                    });
+
+                    if (inputForm.ShowDialog() == DialogResult.OK)
+                    {
+                        // Update habitat row
+                        habitatRow.BeginEdit();
+                        habitatRow["landscape"] = txtLandscape.Text;
+                        habitatRow["size"] = Convert.ToDouble(txtSize.Text);
+                        habitatRow["temperature"] = Convert.ToDouble(txtTemperature.Text);
+                        habitatRow["humidity"] = Convert.ToDouble(txtHumidity.Text);
+                        habitatRow.EndEdit();
+
+                        SaveChanges();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error editing habitat: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
         private void BtnDeleteChild_Click(object sender, EventArgs e)
+        {
+            // Show selection dialog
+            using (Form selectionForm = new Form())
+            {
+                selectionForm.Text = "Select Operation";
+                selectionForm.Size = new System.Drawing.Size(300, 150);
+                selectionForm.StartPosition = FormStartPosition.CenterParent;
+
+                Label lblSelect = new Label { Text = "Select table to delete from:", Location = new System.Drawing.Point(20, 20), AutoSize = true };
+                ComboBox cmbTable = new ComboBox { Location = new System.Drawing.Point(20, 50), Width = 240 };
+                cmbTable.Items.AddRange(new string[] { "Animals", "Habitats" });
+
+                Button btnProceed = new Button { Text = "Proceed", Location = new System.Drawing.Point(100, 80), DialogResult = DialogResult.OK };
+                Button btnCancel = new Button { Text = "Cancel", Location = new System.Drawing.Point(200, 80), DialogResult = DialogResult.Cancel };
+
+                selectionForm.Controls.AddRange(new Control[] { lblSelect, cmbTable, btnProceed, btnCancel });
+
+                if (selectionForm.ShowDialog() == DialogResult.OK)
+                {
+                    if (cmbTable.SelectedItem.ToString() == "Animals")
+                    {
+                        DeleteAnimal();
+                    }
+                    else
+                    {
+                        DeleteHabitat();
+                    }
+                }
+            }
+        }
+
+        private void DeleteAnimal()
         {
             try
             {
@@ -422,11 +812,59 @@ namespace Bioparco_Di_Roma
             }
         }
 
+        private void DeleteHabitat()
+        {
+            try
+            {
+                // Create input form
+                using (Form inputForm = new Form())
+                {
+                    inputForm.Text = "Delete Habitat";
+                    inputForm.Size = new System.Drawing.Size(300, 150);
+                    inputForm.StartPosition = FormStartPosition.CenterParent;
+
+                    // Create input controls
+                    Label lblHid = new Label { Text = "Habitat ID:", Location = new System.Drawing.Point(20, 20), AutoSize = true };
+                    TextBox txtHid = new TextBox { Location = new System.Drawing.Point(120, 20), Width = 150 };
+
+                    Button btnSubmit = new Button { Text = "Delete", Location = new System.Drawing.Point(100, 80), DialogResult = DialogResult.OK };
+                    Button btnCancel = new Button { Text = "Cancel", Location = new System.Drawing.Point(200, 80), DialogResult = DialogResult.Cancel };
+
+                    // Add controls to form
+                    inputForm.Controls.AddRange(new Control[] { lblHid, txtHid, btnSubmit, btnCancel });
+
+                    if (inputForm.ShowDialog() == DialogResult.OK)
+                    {
+                        int habitatId = Convert.ToInt32(txtHid.Text);
+                        DataRow[] rows = dataSet.Tables[parentTableName].Select($"hid = {habitatId}");
+
+                        if (rows.Length > 0)
+                        {
+                            if (MessageBox.Show("Are you sure you want to delete this habitat? This will also delete all animals in this habitat.", "Confirm Delete", 
+                                MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+                            {
+                                rows[0].Delete();
+                                SaveChanges();
+                            }
+                        }
+                        else
+                        {
+                            MessageBox.Show("Habitat ID not found.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error deleting habitat: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
         private void SaveChanges()
         {
             try
             {
-                // Update habitat changes
+                // Update habitat changes (we no longer need it but it doesnt do any bad)
                 parentAdapter.Update(dataSet, parentTableName);
 
                 // Update animal changes
