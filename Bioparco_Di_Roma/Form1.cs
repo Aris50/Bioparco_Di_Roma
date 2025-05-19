@@ -315,6 +315,43 @@ namespace Bioparco_Di_Roma
                 {
                     detailAdapter.Fill(dataSet, detailTable.Name);
                 }
+
+                // Bind the DataGridViews to the data
+                if (dataSet.Tables.Contains(masterTable.Name))
+                {
+                    parentDataGridView.DataSource = dataSet.Tables[masterTable.Name];
+                }
+
+                if (dataSet.Tables.Contains(detailTable.Name))
+                {
+                    childDataGridView.DataSource = dataSet.Tables[detailTable.Name];
+                }
+
+                // Set up the relationship between master and detail tables
+                if (config.Relationships != null && config.Relationships.Any())
+                {
+                    foreach (var relationship in config.Relationships)
+                    {
+                        // Get the table names from the aliases
+                        var masterTableName = config.Tables.Find(t => t.Alias == relationship.ParentAlias)?.Name;
+                        var detailTableName = config.Tables.Find(t => t.Alias == relationship.ChildAlias)?.Name;
+
+                        if (masterTableName != null && detailTableName != null)
+                        {
+                            var masterColumn = dataSet.Tables[masterTableName].Columns[relationship.ParentKey];
+                            var detailColumn = dataSet.Tables[detailTableName].Columns[relationship.ChildForeignKey];
+
+                            var relation = new DataRelation(
+                                relationship.Name,
+                                masterColumn,
+                                detailColumn,
+                                true
+                            );
+
+                            dataSet.Relations.Add(relation);
+                        }
+                    }
+                }
             }
             catch (Exception ex)
             {
