@@ -28,186 +28,184 @@
         /// </summary>
         private void InitializeComponent()
         {
-            this.components = new System.ComponentModel.Container();
-            this.parentDataGridView = new System.Windows.Forms.DataGridView();
-            this.childDataGridView = new System.Windows.Forms.DataGridView();
-            this.btnConnect = new System.Windows.Forms.Button();
-            this.btnAddChild = new System.Windows.Forms.Button();
-            this.btnEditChild = new System.Windows.Forms.Button();
-            this.btnDeleteChild = new System.Windows.Forms.Button();
-            this.txtConnectionString = new System.Windows.Forms.TextBox();
-            this.lblStatus = new System.Windows.Forms.Label();
-            this.lblConnectionString = new System.Windows.Forms.Label();
-            this.lblParent = new System.Windows.Forms.Label();
-            this.lblChild = new System.Windows.Forms.Label();
-            this.splitContainer = new System.Windows.Forms.SplitContainer();
-            ((System.ComponentModel.ISupportInitialize)(this.parentDataGridView)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.childDataGridView)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.splitContainer)).BeginInit();
-            this.splitContainer.Panel1.SuspendLayout();
-            this.splitContainer.Panel2.SuspendLayout();
-            this.splitContainer.SuspendLayout();
-            this.SuspendLayout();
+            parentDataGridView = new DataGridView();
+            btnConnect = new Button();
+            btnAddChild = new Button();
+            btnEditChild = new Button();
+            btnDeleteChild = new Button();
+            txtConnectionString = new TextBox();
+            lblStatus = new Label();
+            lblConnectionString = new Label();
+            lblParent = new Label();
+            lblChild = new Label();
+            splitContainer = new SplitContainer();
+            childDataGridView = new DataGridView();
+            ((System.ComponentModel.ISupportInitialize)parentDataGridView).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)splitContainer).BeginInit();
+            splitContainer.Panel1.SuspendLayout();
+            splitContainer.Panel2.SuspendLayout();
+            splitContainer.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)childDataGridView).BeginInit();
+            SuspendLayout();
             // 
             // parentDataGridView
             // 
-            this.parentDataGridView.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
-            | System.Windows.Forms.AnchorStyles.Left) 
-            | System.Windows.Forms.AnchorStyles.Right)));
-            this.parentDataGridView.ColumnHeadersHeightSizeMode = System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode.AutoSize;
-            this.parentDataGridView.Location = new System.Drawing.Point(3, 25);
-            this.parentDataGridView.Name = "parentDataGridView";
-            this.parentDataGridView.RowTemplate.Height = 25;
-            this.parentDataGridView.Size = new System.Drawing.Size(770, 150);
-            this.parentDataGridView.TabIndex = 0;
-            // 
-            // childDataGridView
-            // 
-            this.childDataGridView.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
-            | System.Windows.Forms.AnchorStyles.Left) 
-            | System.Windows.Forms.AnchorStyles.Right)));
-            this.childDataGridView.ColumnHeadersHeightSizeMode = System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode.AutoSize;
-            this.childDataGridView.Location = new System.Drawing.Point(3, 25);
-            this.childDataGridView.Name = "childDataGridView";
-            this.childDataGridView.RowTemplate.Height = 25;
-            this.childDataGridView.Size = new System.Drawing.Size(770, 150);
-            this.childDataGridView.TabIndex = 1;
+            parentDataGridView.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+            parentDataGridView.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+            parentDataGridView.Location = new Point(3, 25);
+            parentDataGridView.Name = "parentDataGridView";
+            parentDataGridView.Size = new Size(770, 150);
+            parentDataGridView.TabIndex = 0;
             // 
             // btnConnect
             // 
-            this.btnConnect.Location = new System.Drawing.Point(12, 71);
-            this.btnConnect.Name = "btnConnect";
-            this.btnConnect.Size = new System.Drawing.Size(75, 23);
-            this.btnConnect.TabIndex = 2;
-            this.btnConnect.Text = "Connect";
-            this.btnConnect.UseVisualStyleBackColor = true;
+            btnConnect.Location = new Point(12, 71);
+            btnConnect.Name = "btnConnect";
+            btnConnect.Size = new Size(75, 23);
+            btnConnect.TabIndex = 2;
+            btnConnect.Text = "Connect";
+            btnConnect.UseVisualStyleBackColor = true;
             // 
             // btnAddChild
             // 
-            this.btnAddChild.Location = new System.Drawing.Point(93, 71);
-            this.btnAddChild.Name = "btnAddChild";
-            this.btnAddChild.Size = new System.Drawing.Size(75, 23);
-            this.btnAddChild.TabIndex = 4;
-            this.btnAddChild.Text = "Add Animal";
-            this.btnAddChild.UseVisualStyleBackColor = true;
+            btnAddChild.Location = new Point(93, 71);
+            btnAddChild.Name = "btnAddChild";
+            btnAddChild.Size = new Size(75, 23);
+            btnAddChild.TabIndex = 4;
+            btnAddChild.Text = "Add Animal";
+            btnAddChild.UseVisualStyleBackColor = true;
             // 
             // btnEditChild
             // 
-            this.btnEditChild.Location = new System.Drawing.Point(174, 71);
-            this.btnEditChild.Name = "btnEditChild";
-            this.btnEditChild.Size = new System.Drawing.Size(75, 23);
-            this.btnEditChild.TabIndex = 5;
-            this.btnEditChild.Text = "Edit Animal";
-            this.btnEditChild.UseVisualStyleBackColor = true;
+            btnEditChild.Location = new Point(174, 71);
+            btnEditChild.Name = "btnEditChild";
+            btnEditChild.Size = new Size(75, 23);
+            btnEditChild.TabIndex = 5;
+            btnEditChild.Text = "Edit Animal";
+            btnEditChild.UseVisualStyleBackColor = true;
             // 
             // btnDeleteChild
             // 
-            this.btnDeleteChild.Location = new System.Drawing.Point(255, 71);
-            this.btnDeleteChild.Name = "btnDeleteChild";
-            this.btnDeleteChild.Size = new System.Drawing.Size(75, 23);
-            this.btnDeleteChild.TabIndex = 6;
-            this.btnDeleteChild.Text = "Delete Animal";
-            this.btnDeleteChild.UseVisualStyleBackColor = true;
+            btnDeleteChild.Location = new Point(255, 71);
+            btnDeleteChild.Name = "btnDeleteChild";
+            btnDeleteChild.Size = new Size(75, 23);
+            btnDeleteChild.TabIndex = 6;
+            btnDeleteChild.Text = "Delete Animal";
+            btnDeleteChild.UseVisualStyleBackColor = true;
             // 
             // txtConnectionString
             // 
-            this.txtConnectionString.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
-            | System.Windows.Forms.AnchorStyles.Right)));
-            this.txtConnectionString.Location = new System.Drawing.Point(12, 25);
-            this.txtConnectionString.Name = "txtConnectionString";
-            this.txtConnectionString.Size = new System.Drawing.Size(776, 23);
-            this.txtConnectionString.TabIndex = 7;
+            txtConnectionString.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            txtConnectionString.Location = new Point(12, 25);
+            txtConnectionString.Name = "txtConnectionString";
+            txtConnectionString.Size = new Size(776, 23);
+            txtConnectionString.TabIndex = 7;
             // 
             // lblStatus
             // 
-            this.lblStatus.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
-            this.lblStatus.AutoSize = true;
-            this.lblStatus.Location = new System.Drawing.Point(713, 75);
-            this.lblStatus.Name = "lblStatus";
-            this.lblStatus.Size = new System.Drawing.Size(75, 15);
-            this.lblStatus.TabIndex = 8;
-            this.lblStatus.Text = "Disconnected";
+            lblStatus.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            lblStatus.AutoSize = true;
+            lblStatus.Location = new Point(713, 75);
+            lblStatus.Name = "lblStatus";
+            lblStatus.Size = new Size(79, 15);
+            lblStatus.TabIndex = 8;
+            lblStatus.Text = "Disconnected";
             // 
             // lblConnectionString
             // 
-            this.lblConnectionString.AutoSize = true;
-            this.lblConnectionString.Location = new System.Drawing.Point(12, 7);
-            this.lblConnectionString.Name = "lblConnectionString";
-            this.lblConnectionString.Size = new System.Drawing.Size(103, 15);
-            this.lblConnectionString.TabIndex = 9;
-            this.lblConnectionString.Text = "Connection String:";
+            lblConnectionString.AutoSize = true;
+            lblConnectionString.Location = new Point(12, 7);
+            lblConnectionString.Name = "lblConnectionString";
+            lblConnectionString.Size = new Size(106, 15);
+            lblConnectionString.TabIndex = 9;
+            lblConnectionString.Text = "Connection String:";
             // 
             // lblParent
             // 
-            this.lblParent.AutoSize = true;
-            this.lblParent.Location = new System.Drawing.Point(3, 7);
-            this.lblParent.Name = "lblParent";
-            this.lblParent.Size = new System.Drawing.Size(43, 15);
-            this.lblParent.TabIndex = 10;
-            this.lblParent.Text = "Parent:";
+            lblParent.AutoSize = true;
+            lblParent.Location = new Point(3, 7);
+            lblParent.Name = "lblParent";
+            lblParent.Size = new Size(44, 15);
+            lblParent.TabIndex = 10;
+            lblParent.Text = "Parent:";
             // 
             // lblChild
             // 
-            this.lblChild.AutoSize = true;
-            this.lblChild.Location = new System.Drawing.Point(3, 7);
-            this.lblChild.Name = "lblChild";
-            this.lblChild.Size = new System.Drawing.Size(38, 15);
-            this.lblChild.TabIndex = 11;
-            this.lblChild.Text = "Child:";
+            lblChild.AutoSize = true;
+            lblChild.Location = new Point(3, 7);
+            lblChild.Name = "lblChild";
+            lblChild.Size = new Size(38, 15);
+            lblChild.TabIndex = 11;
+            lblChild.Text = "Child:";
             // 
             // splitContainer
             // 
-            this.splitContainer.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
-            | System.Windows.Forms.AnchorStyles.Left) 
-            | System.Windows.Forms.AnchorStyles.Right)));
-            this.splitContainer.Location = new System.Drawing.Point(12, 100);
-            this.splitContainer.Name = "splitContainer";
-            this.splitContainer.Orientation = System.Windows.Forms.Orientation.Horizontal;
+            splitContainer.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+            splitContainer.Location = new Point(12, 100);
+            splitContainer.Name = "splitContainer";
+            splitContainer.Orientation = Orientation.Horizontal;
             // 
             // splitContainer.Panel1
             // 
-            this.splitContainer.Panel1.Controls.Add(this.lblParent);
-            this.splitContainer.Panel1.Controls.Add(this.parentDataGridView);
+            splitContainer.Panel1.Controls.Add(lblParent);
+            splitContainer.Panel1.Controls.Add(parentDataGridView);
             // 
             // splitContainer.Panel2
             // 
-            this.splitContainer.Panel2.Controls.Add(this.lblChild);
-            this.splitContainer.Panel2.Controls.Add(this.childDataGridView);
-            this.splitContainer.Size = new System.Drawing.Size(776, 338);
-            this.splitContainer.SplitterDistance = 181;
-            this.splitContainer.TabIndex = 12;
+            splitContainer.Panel2.Controls.Add(lblChild);
+            splitContainer.Panel2.Controls.Add(childDataGridView);
+            splitContainer.Size = new Size(776, 338);
+            splitContainer.SplitterDistance = 181;
+            splitContainer.TabIndex = 12;
+            // 
+            // childDataGridView
+            // 
+            childDataGridView.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+            childDataGridView.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+            childDataGridView.Location = new Point(3, 25);
+            childDataGridView.Name = "childDataGridView";
+            childDataGridView.Size = new Size(770, 150);
+            childDataGridView.TabIndex = 1;
             // 
             // Form1
             // 
-            this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
-            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(800, 450);
-            this.Controls.Add(this.splitContainer);
-            this.Controls.Add(this.lblConnectionString);
-            this.Controls.Add(this.lblStatus);
-            this.Controls.Add(this.txtConnectionString);
-            this.Controls.Add(this.btnDeleteChild);
-            this.Controls.Add(this.btnEditChild);
-            this.Controls.Add(this.btnAddChild);
-            this.Controls.Add(this.btnConnect);
-            this.Name = "Form1";
-            this.Text = "Parent-Child Database Manager";
-            ((System.ComponentModel.ISupportInitialize)(this.parentDataGridView)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.childDataGridView)).EndInit();
-            this.splitContainer.Panel1.ResumeLayout(false);
-            this.splitContainer.Panel1.PerformLayout();
-            this.splitContainer.Panel2.ResumeLayout(false);
-            this.splitContainer.Panel2.PerformLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.splitContainer)).EndInit();
-            this.splitContainer.ResumeLayout(false);
-            this.ResumeLayout(false);
-            this.PerformLayout();
+            AutoScaleDimensions = new SizeF(7F, 15F);
+            AutoScaleMode = AutoScaleMode.Font;
+            ClientSize = new Size(800, 450);
+            Controls.Add(splitContainer);
+            Controls.Add(lblConnectionString);
+            Controls.Add(lblStatus);
+            Controls.Add(txtConnectionString);
+            Controls.Add(btnDeleteChild);
+            Controls.Add(btnEditChild);
+            Controls.Add(btnAddChild);
+            Controls.Add(btnConnect);
+            Name = "Form1";
+            Text = "Parent-Child Database Manager";
+            Load += Form1_Load;
+            ((System.ComponentModel.ISupportInitialize)parentDataGridView).EndInit();
+            splitContainer.Panel1.ResumeLayout(false);
+            splitContainer.Panel1.PerformLayout();
+            splitContainer.Panel2.ResumeLayout(false);
+            splitContainer.Panel2.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)splitContainer).EndInit();
+            splitContainer.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)childDataGridView).EndInit();
+            ResumeLayout(false);
+            PerformLayout();
         }
+
+        // Add this method to the Form1 class
+        private void Form1_Load(object sender, EventArgs e)
+        {
+            // Initialize any logic or data needed when the form loads
+            lblStatus.Text = "Ready to connect.";
+        }
+
 
         #endregion
 
         private System.Windows.Forms.DataGridView parentDataGridView;
-        private System.Windows.Forms.DataGridView childDataGridView;
         private System.Windows.Forms.Button btnConnect;
         private System.Windows.Forms.Button btnAddChild;
         private System.Windows.Forms.Button btnEditChild;
@@ -218,5 +216,6 @@
         private System.Windows.Forms.Label lblParent;
         private System.Windows.Forms.Label lblChild;
         private System.Windows.Forms.SplitContainer splitContainer;
+        private DataGridView childDataGridView;
     }
 }

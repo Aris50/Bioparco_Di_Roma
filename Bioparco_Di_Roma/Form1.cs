@@ -2,6 +2,11 @@ using System;
 using System.Data;
 using System.Data.SqlClient;
 using System.Windows.Forms;
+using System.Text.Json;
+using System.IO;
+using System.Collections.Generic;
+using System.Linq;
+using Bioparco_Di_Roma.Config;
 
 namespace Bioparco_Di_Roma
 {
@@ -9,30 +14,312 @@ namespace Bioparco_Di_Roma
     {
         private SqlConnection connection;
         private DataSet dataSet;
-        private SqlDataAdapter parentAdapter;
-        private SqlDataAdapter childAdapter;
-        private DataRelation relation;
-        private string parentTableName = "Habitat";
-        private string childTableName = "Animal";
-        private string parentKeyColumn = "hid";
-        private string childKeyColumn = "hid";
+        private Dictionary<string, SqlDataAdapter> adapters;
+        private Dictionary<string, DataRelation> relations;
+        private ScenarioConfig config;
+        private TableConfig masterTable;
+        private TableConfig detailTable;
+        private SqlDataAdapter masterAdapter;
+        private SqlDataAdapter detailAdapter;
 
         public Form1()
         {
-            InitializeComponent();
+            try
+            {
+                InitializeComponent();
+                
+                // Load configuration first
+                LoadConfiguration();
+                
+                // Initialize database connection
+                InitializeDatabase();
+                
+                // Setup event handlers
+                SetupEventHandlers();
+                
+                // Apply form configuration last
+                ApplyFormConfiguration();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error initializing form: {ex.Message}", "Initialization Error", 
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+                Application.Exit();
+            }
+        }
+
+        private void LoadConfiguration()
+        {
+            try
+            {
+                string configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.json");
+                
+                if (!File.Exists(configPath))
+                {
+                    throw new FileNotFoundException($"Configuration file not found at: {configPath}");
+                }
+
+                string jsonString = File.ReadAllText(configPath);
+                if (string.IsNullOrWhiteSpace(jsonString))
+                {
+                    throw new InvalidDataException("Configuration file is empty");
+                }
+
+                // Deserialize the root object that contains the Scenario property
+                var rootConfig = JsonSerializer.Deserialize<ScenarioRootConfig>(jsonString);
+                
+                if (rootConfig?.Scenario == null)
+                {
+                    throw new InvalidDataException("Scenario configuration is missing");
+                }
+
+                // Assign the Scenario configuration to our config field
+                config = rootConfig.Scenario;
+
+                if (config.Form == null)
+                {
+                    throw new InvalidDataException("Form configuration is missing");
+                }
+
+                // Cache table configurations for easier access
+                masterTable = config.Tables?.Find(t => t.Alias == "Master");
+                detailTable = config.Tables?.Find(t => t.Alias == "Detail");
+
+                if (masterTable == null || detailTable == null)
+                {
+                    throw new InvalidDataException("Configuration must include both Master and Detail tables.");
+                }
+
+                // Validate required configuration sections
+                if (config.CrudProcedures == null)
+                {
+                    throw new InvalidDataException("CRUD procedures configuration is missing");
+                }
+
+                if (config.CrudProcedures.Master == null || config.CrudProcedures.Detail == null)
+                {
+                    throw new InvalidDataException("CRUD procedures configuration must include both Master and Detail tables");
+                }
+            }
+            catch (Exception ex)
+            {
+                string errorMessage = $"Error loading configuration: {ex.Message}\n\n" +
+                                    $"Stack Trace: {ex.StackTrace}\n\n" +
+                                    $"Source: {ex.Source}";
+                
+                MessageBox.Show(errorMessage, "Configuration Error", 
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+                
+                // Log the error to a file
+                try
+                {
+                    string logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "error.log");
+                    File.AppendAllText(logPath, $"\n\n[{DateTime.Now}] {errorMessage}");
+                }
+                catch
+                {
+                    // Ignore logging errors
+                }
+
+                Application.Exit();
+            }
+        }
+
+        private void InitializeDatabase()
+        {
             connection = new SqlConnection();
             dataSet = new DataSet();
-            
-            // Set up event handlers
+            adapters = new Dictionary<string, SqlDataAdapter>();
+            relations = new Dictionary<string, DataRelation>();
+        }
+
+        private void SetupEventHandlers()
+        {
             btnConnect.Click += BtnConnect_Click;
             btnAddChild.Click += BtnAddChild_Click;
             btnEditChild.Click += BtnEditChild_Click;
             btnDeleteChild.Click += BtnDeleteChild_Click;
             parentDataGridView.SelectionChanged += ParentDataGridView_SelectionChanged;
+        }
 
-            // Update labels to show actual table names
-            lblParent.Text = "Habitats:";
-            lblChild.Text = "Animals:";
+        private void ApplyFormConfiguration()
+        {
+            try
+            {
+                if (config?.Form == null)
+                {
+                    throw new InvalidOperationException("Form configuration is not available");
+                }
+
+                // Apply form properties from configuration with default values
+                this.Text = config.Form.Caption ?? "Bioparco Di Roma";
+                this.Width = config.Form.Width > 0 ? config.Form.Width : 800;
+                this.Height = config.Form.Height > 0 ? config.Form.Height : 600;
+
+                // Update labels using table names from configuration
+                if (masterTable != null)
+                {
+                    lblParent.Text = $"{masterTable.Name}:";
+                }
+                else
+                {
+                    lblParent.Text = "Parent Table:";
+                }
+
+                if (detailTable != null)
+                {
+                    lblChild.Text = $"{detailTable.Name}:";
+                }
+                else
+                {
+                    lblChild.Text = "Child Table:";
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error applying form configuration: {ex.Message}", "Configuration Error", 
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+                
+                // Apply default values
+                this.Text = "Bioparco Di Roma";
+                this.Width = 800;
+                this.Height = 600;
+                lblParent.Text = "Parent Table:";
+                lblChild.Text = "Child Table:";
+            }
+        }
+
+        private void InitializeDataAdapters()
+        {
+            try
+            {
+                // Clear existing adapters
+                adapters.Clear();
+
+                // Create adapters for each table
+                foreach (var table in config.Tables)
+                {
+                    var adapter = new SqlDataAdapter(table.Query, connection);
+                    ConfigureAdapterCommands(adapter, table);
+                    adapters[table.Alias] = adapter;
+                }
+
+                // Separate master and detail adapters
+                masterAdapter = adapters["Master"];
+                detailAdapter = adapters["Detail"];
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error initializing data adapters: {ex.Message}", "Error", 
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+                throw;
+            }
+        }
+
+        private void ConfigureAdapterCommands(SqlDataAdapter adapter, TableConfig table)
+        {
+            var crudConfig = GetCrudConfigForTable(table);
+            if (crudConfig == null) return;
+
+            // Configure Insert Command
+            if (!string.IsNullOrEmpty(crudConfig.Insert))
+            {
+                var insertCmd = new SqlCommand(crudConfig.Insert, connection);
+                AddParametersToCommand(insertCmd, table, false);
+                adapter.InsertCommand = insertCmd;
+            }
+
+            // Configure Update Command
+            if (!string.IsNullOrEmpty(crudConfig.Update))
+            {
+                var updateCmd = new SqlCommand(crudConfig.Update, connection);
+                AddParametersToCommand(updateCmd, table, true);
+                adapter.UpdateCommand = updateCmd;
+            }
+
+            // Configure Delete Command
+            if (!string.IsNullOrEmpty(crudConfig.Delete))
+            {
+                var deleteCmd = new SqlCommand(crudConfig.Delete, connection);
+                AddParametersToCommand(deleteCmd, table, true);
+                adapter.DeleteCommand = deleteCmd;
+            }
+        }
+
+        private void AddParametersToCommand(SqlCommand command, TableConfig table, bool isUpdate)
+        {
+            foreach (var column in table.Columns)
+            {
+                if (!column.IsEditable && isUpdate) continue;
+
+                var parameter = new SqlParameter
+                {
+                    ParameterName = $"@{column.Name}",
+                    SqlDbType = GetSqlDbType(column.Type),
+                    SourceColumn = column.Name
+                };
+
+                if (isUpdate && column.IsPrimaryKey)
+                {
+                    parameter.SourceVersion = DataRowVersion.Original;
+                }
+
+                command.Parameters.Add(parameter);
+            }
+        }
+
+        private SqlDbType GetSqlDbType(string typeName)
+        {
+            return typeName.ToLower() switch
+            {
+                "int" => SqlDbType.Int,
+                "bigint" => SqlDbType.BigInt,
+                "float" => SqlDbType.Float,
+                "decimal" => SqlDbType.Decimal,
+                "datetime" => SqlDbType.DateTime,
+                "bit" => SqlDbType.Bit,
+                "nvarchar" => SqlDbType.NVarChar,
+                "varchar" => SqlDbType.VarChar,
+                "char" => SqlDbType.Char,
+                "nchar" => SqlDbType.NChar,
+                "text" => SqlDbType.Text,
+                "ntext" => SqlDbType.NText,
+                _ => SqlDbType.NVarChar
+            };
+        }
+
+        private TableCrudConfig GetCrudConfigForTable(TableConfig table)
+        {
+            if (table.Alias == "Master")
+                return (TableCrudConfig)config.CrudProcedures.Master;
+            if (table.Alias == "Detail")
+                return (TableCrudConfig)config.CrudProcedures.Detail;
+            return null;
+        }
+
+        private void LoadData()
+        {
+            try
+            {
+                // Clear existing data
+                dataSet.Clear();
+
+                // Load master data
+                if (masterAdapter != null)
+                {
+                    masterAdapter.Fill(dataSet, masterTable.Name);
+                }
+
+                // Load detail data
+                if (detailAdapter != null)
+                {
+                    detailAdapter.Fill(dataSet, detailTable.Name);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error loading data: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
 
         private void BtnConnect_Click(object sender, EventArgs e)
@@ -61,72 +348,6 @@ namespace Bioparco_Di_Roma
             catch (Exception ex)
             {
                 MessageBox.Show($"Error connecting to database: {ex.Message}", "Connection Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-        }
-
-        private void InitializeDataAdapters()
-        {
-            // Create parent adapter for Habitats
-            parentAdapter = new SqlDataAdapter($"SELECT * FROM {parentTableName}", connection);
-            SqlCommandBuilder parentBuilder = new SqlCommandBuilder(parentAdapter);
-
-            // Create child adapter for Animals
-            childAdapter = new SqlDataAdapter($"SELECT * FROM {childTableName}", connection);
-            SqlCommandBuilder childBuilder = new SqlCommandBuilder(childAdapter);
-        }
-
-        private void LoadData()
-        {
-            try
-            {
-                // Clear existing data
-                dataSet.Clear();
-
-                // Fill parent table (Habitats)
-                parentAdapter.Fill(dataSet, parentTableName);
-
-                // Fill child table (Animals)
-                childAdapter.Fill(dataSet, childTableName);
-
-                // Create relation between Habitats and Animals
-                relation = new DataRelation(
-                    "HabitatAnimals",
-                    dataSet.Tables[parentTableName].Columns[parentKeyColumn],
-                    dataSet.Tables[childTableName].Columns[childKeyColumn]
-                );
-                dataSet.Relations.Add(relation);
-
-                // Bind parent data (Habitats)
-                parentDataGridView.DataSource = dataSet;
-                parentDataGridView.DataMember = parentTableName;
-
-                // Make parent grid read-only
-                parentDataGridView.ReadOnly = true;
-                parentDataGridView.AllowUserToAddRows = false;
-                parentDataGridView.AllowUserToDeleteRows = false;
-
-                // Bind child data (Animals)
-                childDataGridView.DataSource = dataSet;
-                childDataGridView.DataMember = $"{parentTableName}.HabitatAnimals";
-
-                // Make child grid read-only except for animal ID column
-                childDataGridView.ReadOnly = true;
-                childDataGridView.AllowUserToAddRows = false;
-                childDataGridView.AllowUserToDeleteRows = false;
-
-                // Find the animal ID column and make it editable
-                foreach (DataGridViewColumn column in childDataGridView.Columns)
-                {
-                    if (column.Name == "aid")
-                    {
-                        column.ReadOnly = false;
-                        break;
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Error loading data: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -168,119 +389,219 @@ namespace Bioparco_Di_Roma
             }
         }
 
-        private bool ValidateAnimalFields(TextBox txtAid, TextBox txtName, TextBox txtSpecies, TextBox txtAge, 
-            ComboBox cmbGender, ComboBox cmbVertebrateClass, TextBox txtBodyTemperature, 
-            TextBox txtWeight, TextBox txtVid, out string errorMessage)
+        private Dictionary<string, object> ShowInputDialog(TableConfig table, DataRow existingRow = null)
+        {
+            using (Form inputForm = new Form())
+            {
+                inputForm.Text = existingRow == null ? $"Add New {table.Name}" : $"Edit {table.Name}";
+                inputForm.Size = new System.Drawing.Size(400, 600);
+                inputForm.StartPosition = FormStartPosition.CenterParent;
+                inputForm.FormBorderStyle = FormBorderStyle.FixedDialog;
+                inputForm.MaximizeBox = false;
+                inputForm.MinimizeBox = false;
+
+                var controls = new Dictionary<string, Control>();
+                var yPos = 20;
+                var labelWidth = 120;
+                var controlWidth = 200;
+                var spacing = 40;
+
+                // Create controls for each column
+                foreach (var column in table.Columns)
+                {
+                    // Skip if not editable
+                    if (!column.IsEditable && existingRow != null)
+                        continue;
+
+                    // Create label
+                    var label = new Label
+                    {
+                        Text = $"{column.DisplayName}:",
+                        Location = new System.Drawing.Point(20, yPos),
+                        Width = labelWidth,
+                        AutoSize = true
+                    };
+
+                    // Create input control based on column type
+                    Control inputControl;
+                    if (column.Type.ToLower() == "bool")
+                    {
+                        var checkBox = new CheckBox
+                        {
+                            Location = new System.Drawing.Point(150, yPos),
+                            Width = controlWidth,
+                            Checked = existingRow != null ? Convert.ToBoolean(existingRow[column.Name]) : false
+                        };
+                        inputControl = checkBox;
+                    }
+                    else if (column.Validation?.AllowedValues != null && column.Validation.AllowedValues.Any())
+                    {
+                        var comboBox = new ComboBox
+                        {
+                            Location = new System.Drawing.Point(150, yPos),
+                            Width = controlWidth,
+                            DropDownStyle = ComboBoxStyle.DropDownList
+                        };
+                        comboBox.Items.AddRange(column.Validation.AllowedValues.ToArray());
+                        if (existingRow != null)
+                            comboBox.SelectedItem = existingRow[column.Name].ToString();
+                        else if (comboBox.Items.Count > 0)
+                            comboBox.SelectedIndex = 0;
+                        inputControl = comboBox;
+                    }
+                    else
+                    {
+                        var textBox = new TextBox
+                        {
+                            Location = new System.Drawing.Point(150, yPos),
+                            Width = controlWidth,
+                            Text = existingRow != null ? existingRow[column.Name].ToString() : ""
+                        };
+                        inputControl = textBox;
+                    }
+
+                    // Add controls to form
+                    inputForm.Controls.Add(label);
+                    inputForm.Controls.Add(inputControl);
+                    controls[column.Name] = inputControl;
+
+                    yPos += spacing;
+                }
+
+                // Add buttons
+                var btnSave = new Button
+                {
+                    Text = "Save",
+                    DialogResult = DialogResult.OK,
+                    Location = new System.Drawing.Point(150, yPos)
+                };
+
+                var btnCancel = new Button
+                {
+                    Text = "Cancel",
+                    DialogResult = DialogResult.Cancel,
+                    Location = new System.Drawing.Point(250, yPos)
+                };
+
+                inputForm.Controls.Add(btnSave);
+                inputForm.Controls.Add(btnCancel);
+
+                // Handle validation and data collection
+                if (inputForm.ShowDialog() == DialogResult.OK)
+                {
+                    var values = new Dictionary<string, object>();
+                    string errorMessage;
+
+                    foreach (var column in table.Columns)
+                    {
+                        if (!column.IsEditable && existingRow != null)
+                        {
+                            values[column.Name] = existingRow[column.Name];
+                            continue;
+                        }
+
+                        if (!ValidateField(column, controls[column.Name], out errorMessage))
+                        {
+                            MessageBox.Show(errorMessage, "Validation Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                            return null;
+                        }
+
+                        values[column.Name] = GetControlValue(controls[column.Name], column.Type);
+                    }
+
+                    return values;
+                }
+
+                return null;
+            }
+        }
+
+        private bool ValidateField(ColumnConfig column, Control control, out string errorMessage)
         {
             errorMessage = string.Empty;
 
-            // Validate Animal ID
-            if (!int.TryParse(txtAid.Text, out int aid) || aid <= 0)
+            // Check if required
+            if (column.IsRequired)
             {
-                errorMessage = "Animal ID must be a positive number.";
-                return false;
+                if (control is TextBox textBox && string.IsNullOrWhiteSpace(textBox.Text))
+                {
+                    errorMessage = $"{column.DisplayName} is required.";
+                    return false;
+                }
+                if (control is ComboBox comboBox && comboBox.SelectedItem == null)
+                {
+                    errorMessage = $"{column.DisplayName} is required.";
+                    return false;
+                }
             }
 
-            // Validate Name
-            if (string.IsNullOrWhiteSpace(txtName.Text))
-            {
-                errorMessage = "Name is required.";
-                return false;
-            }
+            // Get the value for further validation
+            var value = GetControlValue(control, column.Type);
+            if (value == null && !column.IsRequired)
+                return true;
 
-            // Validate Species
-            if (string.IsNullOrWhiteSpace(txtSpecies.Text))
+            // Validate numeric ranges
+            if (column.Validation != null)
             {
-                errorMessage = "Species is required.";
-                return false;
-            }
+                if (column.Validation.MinValue.HasValue)
+                {
+                    if (value is IComparable comparable && comparable.CompareTo(column.Validation.MinValue.Value) < 0)
+                    {
+                        errorMessage = $"{column.DisplayName} must be greater than or equal to {column.Validation.MinValue.Value}.";
+                        return false;
+                    }
+                }
 
-            // Validate Age
-            if (!int.TryParse(txtAge.Text, out int age) || age < 0 || age > 100)
-            {
-                errorMessage = "Age must be a number between 0 and 100.";
-                return false;
-            }
+                if (column.Validation.MaxValue.HasValue)
+                {
+                    if (value is IComparable comparable && comparable.CompareTo(column.Validation.MaxValue.Value) > 0)
+                    {
+                        errorMessage = $"{column.DisplayName} must be less than or equal to {column.Validation.MaxValue.Value}.";
+                        return false;
+                    }
+                }
 
-            // Validate Gender
-            if (cmbGender.SelectedItem == null)
-            {
-                errorMessage = "Gender must be selected.";
-                return false;
-            }
-
-            // Validate Vertebrate Class
-            if (cmbVertebrateClass.SelectedItem == null)
-            {
-                errorMessage = "Vertebrate Class must be selected.";
-                return false;
-            }
-
-            // Validate Body Temperature
-            if (!double.TryParse(txtBodyTemperature.Text, out double temperature) || temperature < 0 || temperature > 50)
-            {
-                errorMessage = "Body Temperature must be a number between 0 and 50.";
-                return false;
-            }
-
-            // Validate Weight
-            if (!double.TryParse(txtWeight.Text, out double weight) || weight <= 0)
-            {
-                errorMessage = "Weight must be a positive number.";
-                return false;
-            }
-
-            // Validate Vet ID
-            if (!int.TryParse(txtVid.Text, out int vid) || vid <= 0)
-            {
-                errorMessage = "Vet ID must be a positive number.";
-                return false;
+                // Validate allowed values
+                if (column.Validation.AllowedValues != null && column.Validation.AllowedValues.Any())
+                {
+                    if (control is ComboBox comboBox && !column.Validation.AllowedValues.Contains(comboBox.SelectedItem?.ToString()))
+                    {
+                        errorMessage = $"{column.DisplayName} must be one of the allowed values.";
+                        return false;
+                    }
+                }
             }
 
             return true;
         }
 
-        private bool ValidateHabitatFields(TextBox txtHid, TextBox txtLandscape, TextBox txtSize, 
-            TextBox txtTemperature, TextBox txtHumidity, out string errorMessage)
+        private object GetControlValue(Control control, string type)
         {
-            errorMessage = string.Empty;
-
-            // Validate Habitat ID
-            if (!int.TryParse(txtHid.Text, out int hid) || hid <= 0)
+            if (control is TextBox textBox)
             {
-                errorMessage = "Habitat ID must be a positive number.";
-                return false;
+                if (string.IsNullOrWhiteSpace(textBox.Text))
+                    return null;
+
+                return type.ToLower() switch
+                {
+                    "int" => int.TryParse(textBox.Text, out int intValue) ? intValue : null,
+                    "float" => float.TryParse(textBox.Text, out float floatValue) ? floatValue : null,
+                    "decimal" => decimal.TryParse(textBox.Text, out decimal decimalValue) ? decimalValue : null,
+                    "datetime" => DateTime.TryParse(textBox.Text, out DateTime dateValue) ? dateValue : null,
+                    "bool" => bool.TryParse(textBox.Text, out bool boolValue) ? boolValue : null,
+                    _ => textBox.Text
+                };
+            }
+            else if (control is ComboBox comboBox)
+            {
+                return comboBox.SelectedItem;
+            }
+            else if (control is CheckBox checkBox)
+            {
+                return checkBox.Checked;
             }
 
-            // Validate Landscape
-            if (string.IsNullOrWhiteSpace(txtLandscape.Text))
-            {
-                errorMessage = "Landscape is required.";
-                return false;
-            }
-
-            // Validate Size
-            if (!double.TryParse(txtSize.Text, out double size) || size <= 0)
-            {
-                errorMessage = "Size must be a positive number.";
-                return false;
-            }
-
-            // Validate Temperature
-            if (!double.TryParse(txtTemperature.Text, out double temperature) || temperature < -50 || temperature > 50)
-            {
-                errorMessage = "Temperature must be a number between -50 and 50.";
-                return false;
-            }
-
-            // Validate Humidity
-            if (!double.TryParse(txtHumidity.Text, out double humidity) || humidity < 0 || humidity > 100)
-            {
-                errorMessage = "Humidity must be a number between 0 and 100.";
-                return false;
-            }
-
-            return true;
+            return null;
         }
 
         private void AddAnimal()
@@ -295,119 +616,27 @@ namespace Bioparco_Di_Roma
             {
                 // Get the selected habitat
                 DataRowView habitatRow = (DataRowView)parentDataGridView.CurrentRow.DataBoundItem;
-                int habitatId = Convert.ToInt32(habitatRow[parentKeyColumn]);
+                int habitatId = Convert.ToInt32(habitatRow[masterTable.KeyColumn]);
 
-                // Create input form
-                using (Form inputForm = new Form())
+                var values = ShowInputDialog(detailTable);
+                if (values != null)
                 {
-                    inputForm.Text = "Add New Animal";
-                    inputForm.Size = new System.Drawing.Size(400, 600);
-                    inputForm.StartPosition = FormStartPosition.CenterParent;
+                    // Add the foreign key value
+                    values[detailTable.KeyColumn] = habitatId;
 
-                    // Create input controls with mock data
-                    int yPos = 20;
-                    int labelWidth = 120;
-                    int textBoxWidth = 200;
-                    int spacing = 40;
-
-                    // Animal ID
-                    Label lblAid = new Label { Text = "Animal ID:", Location = new System.Drawing.Point(20, yPos), Width = labelWidth };
-                    TextBox txtAid = new TextBox { Location = new System.Drawing.Point(150, yPos), Width = textBoxWidth, Text = "1001" };
-                    yPos += spacing;
-
-                    // Name
-                    Label lblName = new Label { Text = "Name:", Location = new System.Drawing.Point(20, yPos), Width = labelWidth };
-                    TextBox txtName = new TextBox { Location = new System.Drawing.Point(150, yPos), Width = textBoxWidth, Text = "Leo" };
-                    yPos += spacing;
-
-                    // Species
-                    Label lblSpecies = new Label { Text = "Species:", Location = new System.Drawing.Point(20, yPos), Width = labelWidth };
-                    TextBox txtSpecies = new TextBox { Location = new System.Drawing.Point(150, yPos), Width = textBoxWidth, Text = "Lion" };
-                    yPos += spacing;
-
-                    // Age
-                    Label lblAge = new Label { Text = "Age:", Location = new System.Drawing.Point(20, yPos), Width = labelWidth };
-                    TextBox txtAge = new TextBox { Location = new System.Drawing.Point(150, yPos), Width = textBoxWidth, Text = "5" };
-                    yPos += spacing;
-
-                    // Gender
-                    Label lblGender = new Label { Text = "Gender:", Location = new System.Drawing.Point(20, yPos), Width = labelWidth };
-                    ComboBox cmbGender = new ComboBox { Location = new System.Drawing.Point(150, yPos), Width = textBoxWidth };
-                    cmbGender.Items.AddRange(new string[] { "M", "F" });
-                    cmbGender.SelectedIndex = 0;
-                    yPos += spacing;
-
-                    // Vertebrate Class
-                    Label lblVertebrateClass = new Label { Text = "Vertebrate Class:", Location = new System.Drawing.Point(20, yPos), Width = labelWidth };
-                    ComboBox cmbVertebrateClass = new ComboBox { Location = new System.Drawing.Point(150, yPos), Width = textBoxWidth };
-                    cmbVertebrateClass.Items.AddRange(new string[] { "Mammal", "Bird", "Reptile", "Amphibian", "Fish" });
-                    cmbVertebrateClass.SelectedIndex = 0;
-                    yPos += spacing;
-
-                    // Body Temperature
-                    Label lblBodyTemperature = new Label { Text = "Body Temperature:", Location = new System.Drawing.Point(20, yPos), Width = labelWidth };
-                    TextBox txtBodyTemperature = new TextBox { Location = new System.Drawing.Point(150, yPos), Width = textBoxWidth, Text = "37.5" };
-                    yPos += spacing;
-
-                    // Weight
-                    Label lblWeight = new Label { Text = "Weight (kg):", Location = new System.Drawing.Point(20, yPos), Width = labelWidth };
-                    TextBox txtWeight = new TextBox { Location = new System.Drawing.Point(150, yPos), Width = textBoxWidth, Text = "190" };
-                    yPos += spacing;
-
-                    // Vet ID
-                    Label lblVid = new Label { Text = "Vet ID:", Location = new System.Drawing.Point(20, yPos), Width = labelWidth };
-                    TextBox txtVid = new TextBox { Location = new System.Drawing.Point(150, yPos), Width = textBoxWidth, Text = "1" };
-                    yPos += spacing;
-
-                    // Buttons
-                    Button btnSubmit = new Button { Text = "Add Animal", Location = new System.Drawing.Point(150, yPos), DialogResult = DialogResult.OK };
-                    Button btnCancel = new Button { Text = "Cancel", Location = new System.Drawing.Point(250, yPos), DialogResult = DialogResult.Cancel };
-
-                    // Add controls to form
-                    inputForm.Controls.AddRange(new Control[] {
-                        lblAid, txtAid,
-                        lblName, txtName,
-                        lblSpecies, txtSpecies,
-                        lblAge, txtAge,
-                        lblGender, cmbGender,
-                        lblVertebrateClass, cmbVertebrateClass,
-                        lblBodyTemperature, txtBodyTemperature,
-                        lblWeight, txtWeight,
-                        lblVid, txtVid,
-                        btnSubmit, btnCancel
-                    });
-
-                    if (inputForm.ShowDialog() == DialogResult.OK)
+                    // Create new row
+                    DataRow newRow = dataSet.Tables[detailTable.Name].NewRow();
+                    foreach (var kvp in values)
                     {
-                        // Validate fields
-                        if (!ValidateAnimalFields(txtAid, txtName, txtSpecies, txtAge, cmbGender, 
-                            cmbVertebrateClass, txtBodyTemperature, txtWeight, txtVid, out string errorMessage))
-                        {
-                            MessageBox.Show(errorMessage, "Validation Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                            return;
-                        }
-
-                        // Create new animal row
-                        DataRow newAnimalRow = dataSet.Tables[childTableName].NewRow();
-                        newAnimalRow["aid"] = Convert.ToInt32(txtAid.Text);
-                        newAnimalRow["name"] = txtName.Text;
-                        newAnimalRow["species"] = txtSpecies.Text;
-                        newAnimalRow["age"] = Convert.ToInt32(txtAge.Text);
-                        newAnimalRow["gender"] = cmbGender.SelectedItem.ToString();
-                        newAnimalRow["vertebrate_class"] = cmbVertebrateClass.SelectedItem.ToString();
-                        newAnimalRow["bodytemperature"] = Convert.ToDouble(txtBodyTemperature.Text);
-                        newAnimalRow["weight"] = Convert.ToDouble(txtWeight.Text);
-                        newAnimalRow["vid"] = Convert.ToInt32(txtVid.Text);
-                        newAnimalRow[childKeyColumn] = habitatId;
-
-                        dataSet.Tables[childTableName].Rows.Add(newAnimalRow);
-                        SaveChanges();
+                        newRow[kvp.Key] = kvp.Value ?? DBNull.Value;
                     }
+                    dataSet.Tables[detailTable.Name].Rows.Add(newRow);
+                    SaveChanges();
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error adding animal: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show($"Error adding record: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -415,84 +644,21 @@ namespace Bioparco_Di_Roma
         {
             try
             {
-                // Create input form
-                using (Form inputForm = new Form())
+                var values = ShowInputDialog(masterTable);
+                if (values != null)
                 {
-                    inputForm.Text = "Add New Habitat";
-                    inputForm.Size = new System.Drawing.Size(400, 300);
-                    inputForm.StartPosition = FormStartPosition.CenterParent;
-
-                    // Create input controls with mock data
-                    int yPos = 20;
-                    int labelWidth = 120;
-                    int textBoxWidth = 200;
-                    int spacing = 40;
-
-                    // Habitat ID
-                    Label lblHid = new Label { Text = "Habitat ID:", Location = new System.Drawing.Point(20, yPos), Width = labelWidth };
-                    TextBox txtHid = new TextBox { Location = new System.Drawing.Point(150, yPos), Width = textBoxWidth, Text = "1" };
-                    yPos += spacing;
-
-                    // Landscape
-                    Label lblLandscape = new Label { Text = "Landscape:", Location = new System.Drawing.Point(20, yPos), Width = labelWidth };
-                    TextBox txtLandscape = new TextBox { Location = new System.Drawing.Point(150, yPos), Width = textBoxWidth, Text = "Savannah" };
-                    yPos += spacing;
-
-                    // Size
-                    Label lblSize = new Label { Text = "Size:", Location = new System.Drawing.Point(20, yPos), Width = labelWidth };
-                    TextBox txtSize = new TextBox { Location = new System.Drawing.Point(150, yPos), Width = textBoxWidth, Text = "1000" };
-                    yPos += spacing;
-
-                    // Temperature
-                    Label lblTemperature = new Label { Text = "Temperature:", Location = new System.Drawing.Point(20, yPos), Width = labelWidth };
-                    TextBox txtTemperature = new TextBox { Location = new System.Drawing.Point(150, yPos), Width = textBoxWidth, Text = "25.5" };
-                    yPos += spacing;
-
-                    // Humidity
-                    Label lblHumidity = new Label { Text = "Humidity:", Location = new System.Drawing.Point(20, yPos), Width = labelWidth };
-                    TextBox txtHumidity = new TextBox { Location = new System.Drawing.Point(150, yPos), Width = textBoxWidth, Text = "60.0" };
-                    yPos += spacing;
-
-                    // Buttons
-                    Button btnSubmit = new Button { Text = "Add Habitat", Location = new System.Drawing.Point(150, yPos), DialogResult = DialogResult.OK };
-                    Button btnCancel = new Button { Text = "Cancel", Location = new System.Drawing.Point(250, yPos), DialogResult = DialogResult.Cancel };
-
-                    // Add controls to form
-                    inputForm.Controls.AddRange(new Control[] {
-                        lblHid, txtHid,
-                        lblLandscape, txtLandscape,
-                        lblSize, txtSize,
-                        lblTemperature, txtTemperature,
-                        lblHumidity, txtHumidity,
-                        btnSubmit, btnCancel
-                    });
-
-                    if (inputForm.ShowDialog() == DialogResult.OK)
+                    DataRow newRow = dataSet.Tables[masterTable.Name].NewRow();
+                    foreach (var kvp in values)
                     {
-                        // Validate fields
-                        if (!ValidateHabitatFields(txtHid, txtLandscape, txtSize, txtTemperature, 
-                            txtHumidity, out string errorMessage))
-                        {
-                            MessageBox.Show(errorMessage, "Validation Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                            return;
-                        }
-
-                        // Create new habitat row
-                        DataRow newHabitatRow = dataSet.Tables[parentTableName].NewRow();
-                        newHabitatRow["hid"] = Convert.ToInt32(txtHid.Text);
-                        newHabitatRow["landscape"] = txtLandscape.Text;
-                        newHabitatRow["size"] = Convert.ToDouble(txtSize.Text);
-                        newHabitatRow["temperature"] = Convert.ToDouble(txtTemperature.Text);
-                        newHabitatRow["humidity"] = Convert.ToDouble(txtHumidity.Text);
-
-                        dataSet.Tables[parentTableName].Rows.Add(newHabitatRow);
-                        SaveChanges();
+                        newRow[kvp.Key] = kvp.Value ?? DBNull.Value;
                     }
+                    dataSet.Tables[masterTable.Name].Rows.Add(newRow);
+                    SaveChanges();
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error adding habitat: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show($"Error adding record: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -532,117 +698,28 @@ namespace Bioparco_Di_Roma
         {
             if (childDataGridView.CurrentRow == null)
             {
-                MessageBox.Show("Please select an animal to edit.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show("Please select a record to edit.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
             try
             {
-                // Get the selected animal's DataRow
-                DataRowView animalRowView = (DataRowView)childDataGridView.CurrentRow.DataBoundItem;
-                DataRow animalRow = animalRowView.Row;
-
-                // Create input form
-                using (Form inputForm = new Form())
+                DataRowView rowView = (DataRowView)childDataGridView.CurrentRow.DataBoundItem;
+                var values = ShowInputDialog(detailTable, rowView.Row);
+                if (values != null)
                 {
-                    inputForm.Text = "Edit Animal";
-                    inputForm.Size = new System.Drawing.Size(400, 600);
-                    inputForm.StartPosition = FormStartPosition.CenterParent;
-
-                    // Create input controls with current data
-                    int yPos = 20;
-                    int labelWidth = 120;
-                    int textBoxWidth = 200;
-                    int spacing = 40;
-
-                    // Animal ID (read-only)
-                    Label lblAid = new Label { Text = "Animal ID:", Location = new System.Drawing.Point(20, yPos), Width = labelWidth };
-                    TextBox txtAid = new TextBox { Location = new System.Drawing.Point(150, yPos), Width = textBoxWidth, Text = animalRow["aid"].ToString(), Enabled = false };
-                    yPos += spacing;
-
-                    // Name
-                    Label lblName = new Label { Text = "Name:", Location = new System.Drawing.Point(20, yPos), Width = labelWidth };
-                    TextBox txtName = new TextBox { Location = new System.Drawing.Point(150, yPos), Width = textBoxWidth, Text = animalRow["name"].ToString() };
-                    yPos += spacing;
-
-                    // Species
-                    Label lblSpecies = new Label { Text = "Species:", Location = new System.Drawing.Point(20, yPos), Width = labelWidth };
-                    TextBox txtSpecies = new TextBox { Location = new System.Drawing.Point(150, yPos), Width = textBoxWidth, Text = animalRow["species"].ToString() };
-                    yPos += spacing;
-
-                    // Age
-                    Label lblAge = new Label { Text = "Age:", Location = new System.Drawing.Point(20, yPos), Width = labelWidth };
-                    TextBox txtAge = new TextBox { Location = new System.Drawing.Point(150, yPos), Width = textBoxWidth, Text = animalRow["age"].ToString() };
-                    yPos += spacing;
-
-                    // Gender
-                    Label lblGender = new Label { Text = "Gender:", Location = new System.Drawing.Point(20, yPos), Width = labelWidth };
-                    ComboBox cmbGender = new ComboBox { Location = new System.Drawing.Point(150, yPos), Width = textBoxWidth };
-                    cmbGender.Items.AddRange(new string[] { "M", "F" });
-                    cmbGender.SelectedItem = animalRow["gender"].ToString();
-                    yPos += spacing;
-
-                    // Vertebrate Class
-                    Label lblVertebrateClass = new Label { Text = "Vertebrate Class:", Location = new System.Drawing.Point(20, yPos), Width = labelWidth };
-                    ComboBox cmbVertebrateClass = new ComboBox { Location = new System.Drawing.Point(150, yPos), Width = textBoxWidth };
-                    cmbVertebrateClass.Items.AddRange(new string[] { "Mammal", "Bird", "Reptile", "Amphibian", "Fish" });
-                    cmbVertebrateClass.SelectedItem = animalRow["vertebrate_class"].ToString();
-                    yPos += spacing;
-
-                    // Body Temperature
-                    Label lblBodyTemperature = new Label { Text = "Body Temperature:", Location = new System.Drawing.Point(20, yPos), Width = labelWidth };
-                    TextBox txtBodyTemperature = new TextBox { Location = new System.Drawing.Point(150, yPos), Width = textBoxWidth, Text = animalRow["bodytemperature"].ToString() };
-                    yPos += spacing;
-
-                    // Weight
-                    Label lblWeight = new Label { Text = "Weight (kg):", Location = new System.Drawing.Point(20, yPos), Width = labelWidth };
-                    TextBox txtWeight = new TextBox { Location = new System.Drawing.Point(150, yPos), Width = textBoxWidth, Text = animalRow["weight"].ToString() };
-                    yPos += spacing;
-
-                    // Vet ID
-                    Label lblVid = new Label { Text = "Vet ID:", Location = new System.Drawing.Point(20, yPos), Width = labelWidth };
-                    TextBox txtVid = new TextBox { Location = new System.Drawing.Point(150, yPos), Width = textBoxWidth, Text = animalRow["vid"].ToString() };
-                    yPos += spacing;
-
-                    // Buttons
-                    Button btnSubmit = new Button { Text = "Save Changes", Location = new System.Drawing.Point(150, yPos), DialogResult = DialogResult.OK };
-                    Button btnCancel = new Button { Text = "Cancel", Location = new System.Drawing.Point(250, yPos), DialogResult = DialogResult.Cancel };
-
-                    // Add controls to form
-                    inputForm.Controls.AddRange(new Control[] {
-                        lblAid, txtAid,
-                        lblName, txtName,
-                        lblSpecies, txtSpecies,
-                        lblAge, txtAge,
-                        lblGender, cmbGender,
-                        lblVertebrateClass, cmbVertebrateClass,
-                        lblBodyTemperature, txtBodyTemperature,
-                        lblWeight, txtWeight,
-                        lblVid, txtVid,
-                        btnSubmit, btnCancel
-                    });
-
-                    if (inputForm.ShowDialog() == DialogResult.OK)
+                    rowView.Row.BeginEdit();
+                    foreach (var kvp in values)
                     {
-                        // Update animal row
-                        animalRow.BeginEdit();
-                        animalRow["name"] = txtName.Text;
-                        animalRow["species"] = txtSpecies.Text;
-                        animalRow["age"] = Convert.ToInt32(txtAge.Text);
-                        animalRow["gender"] = cmbGender.SelectedItem.ToString();
-                        animalRow["vertebrate_class"] = cmbVertebrateClass.SelectedItem.ToString();
-                        animalRow["bodytemperature"] = Convert.ToDouble(txtBodyTemperature.Text);
-                        animalRow["weight"] = Convert.ToDouble(txtWeight.Text);
-                        animalRow["vid"] = Convert.ToInt32(txtVid.Text);
-                        animalRow.EndEdit();
-
-                        SaveChanges();
+                        rowView.Row[kvp.Key] = kvp.Value ?? DBNull.Value;
                     }
+                    rowView.Row.EndEdit();
+                    SaveChanges();
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error editing animal: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show($"Error editing record: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -650,85 +727,28 @@ namespace Bioparco_Di_Roma
         {
             if (parentDataGridView.CurrentRow == null)
             {
-                MessageBox.Show("Please select a habitat to edit.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show("Please select a record to edit.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
             try
             {
-                // Get the selected habitat's DataRow
-                DataRowView habitatRowView = (DataRowView)parentDataGridView.CurrentRow.DataBoundItem;
-                DataRow habitatRow = habitatRowView.Row;
-
-                // Create input form
-                using (Form inputForm = new Form())
+                DataRowView rowView = (DataRowView)parentDataGridView.CurrentRow.DataBoundItem;
+                var values = ShowInputDialog(masterTable, rowView.Row);
+                if (values != null)
                 {
-                    inputForm.Text = "Edit Habitat";
-                    inputForm.Size = new System.Drawing.Size(400, 300);
-                    inputForm.StartPosition = FormStartPosition.CenterParent;
-
-                    // Create input controls with current data
-                    int yPos = 20;
-                    int labelWidth = 120;
-                    int textBoxWidth = 200;
-                    int spacing = 40;
-
-                    // Habitat ID (read-only)
-                    Label lblHid = new Label { Text = "Habitat ID:", Location = new System.Drawing.Point(20, yPos), Width = labelWidth };
-                    TextBox txtHid = new TextBox { Location = new System.Drawing.Point(150, yPos), Width = textBoxWidth, Text = habitatRow["hid"].ToString(), Enabled = false };
-                    yPos += spacing;
-
-                    // Landscape
-                    Label lblLandscape = new Label { Text = "Landscape:", Location = new System.Drawing.Point(20, yPos), Width = labelWidth };
-                    TextBox txtLandscape = new TextBox { Location = new System.Drawing.Point(150, yPos), Width = textBoxWidth, Text = habitatRow["landscape"].ToString() };
-                    yPos += spacing;
-
-                    // Size
-                    Label lblSize = new Label { Text = "Size:", Location = new System.Drawing.Point(20, yPos), Width = labelWidth };
-                    TextBox txtSize = new TextBox { Location = new System.Drawing.Point(150, yPos), Width = textBoxWidth, Text = habitatRow["size"].ToString() };
-                    yPos += spacing;
-
-                    // Temperature
-                    Label lblTemperature = new Label { Text = "Temperature:", Location = new System.Drawing.Point(20, yPos), Width = labelWidth };
-                    TextBox txtTemperature = new TextBox { Location = new System.Drawing.Point(150, yPos), Width = textBoxWidth, Text = habitatRow["temperature"].ToString() };
-                    yPos += spacing;
-
-                    // Humidity
-                    Label lblHumidity = new Label { Text = "Humidity:", Location = new System.Drawing.Point(20, yPos), Width = labelWidth };
-                    TextBox txtHumidity = new TextBox { Location = new System.Drawing.Point(150, yPos), Width = textBoxWidth, Text = habitatRow["humidity"].ToString() };
-                    yPos += spacing;
-
-                    // Buttons
-                    Button btnSubmit = new Button { Text = "Save Changes", Location = new System.Drawing.Point(150, yPos), DialogResult = DialogResult.OK };
-                    Button btnCancel = new Button { Text = "Cancel", Location = new System.Drawing.Point(250, yPos), DialogResult = DialogResult.Cancel };
-
-                    // Add controls to form
-                    inputForm.Controls.AddRange(new Control[] {
-                        lblHid, txtHid,
-                        lblLandscape, txtLandscape,
-                        lblSize, txtSize,
-                        lblTemperature, txtTemperature,
-                        lblHumidity, txtHumidity,
-                        btnSubmit, btnCancel
-                    });
-
-                    if (inputForm.ShowDialog() == DialogResult.OK)
+                    rowView.Row.BeginEdit();
+                    foreach (var kvp in values)
                     {
-                        // Update habitat row
-                        habitatRow.BeginEdit();
-                        habitatRow["landscape"] = txtLandscape.Text;
-                        habitatRow["size"] = Convert.ToDouble(txtSize.Text);
-                        habitatRow["temperature"] = Convert.ToDouble(txtTemperature.Text);
-                        habitatRow["humidity"] = Convert.ToDouble(txtHumidity.Text);
-                        habitatRow.EndEdit();
-
-                        SaveChanges();
+                        rowView.Row[kvp.Key] = kvp.Value ?? DBNull.Value;
                     }
+                    rowView.Row.EndEdit();
+                    SaveChanges();
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error editing habitat: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show($"Error editing record: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -788,7 +808,7 @@ namespace Bioparco_Di_Roma
                     if (inputForm.ShowDialog() == DialogResult.OK)
                     {
                         int animalId = Convert.ToInt32(txtAid.Text);
-                        DataRow[] rows = dataSet.Tables[childTableName].Select($"aid = {animalId}");
+                        DataRow[] rows = dataSet.Tables[detailTable.Name].Select($"aid = {animalId}");
 
                         if (rows.Length > 0)
                         {
@@ -836,7 +856,7 @@ namespace Bioparco_Di_Roma
                     if (inputForm.ShowDialog() == DialogResult.OK)
                     {
                         int habitatId = Convert.ToInt32(txtHid.Text);
-                        DataRow[] rows = dataSet.Tables[parentTableName].Select($"hid = {habitatId}");
+                        DataRow[] rows = dataSet.Tables[masterTable.Name].Select($"hid = {habitatId}");
 
                         if (rows.Length > 0)
                         {
@@ -864,39 +884,20 @@ namespace Bioparco_Di_Roma
         {
             try
             {
-                // Update habitat changes (we no longer need it but it doesnt do any bad)
-                parentAdapter.Update(dataSet, parentTableName);
-
-                // Update animal changes
-                childAdapter.Update(dataSet, childTableName);
-
-                // Clear and reload the data to refresh the views
-                dataSet.Clear();
-                parentAdapter.Fill(dataSet, parentTableName);
-                childAdapter.Fill(dataSet, childTableName);
-
-                // Remove existing relation if it exists
-                if (dataSet.Relations.Contains("HabitatAnimals"))
+                // Update master table
+                if (masterAdapter != null)
                 {
-                    dataSet.Relations.Remove("HabitatAnimals");
+                    masterAdapter.Update(dataSet, masterTable.Name);
                 }
 
-                // Create the relation
-                relation = new DataRelation(
-                    "HabitatAnimals",
-                    dataSet.Tables[parentTableName].Columns[parentKeyColumn],
-                    dataSet.Tables[childTableName].Columns[childKeyColumn]
-                );
-                dataSet.Relations.Add(relation);
+                // Update detail table
+                if (detailAdapter != null)
+                {
+                    detailAdapter.Update(dataSet, detailTable.Name);
+                }
 
-                // Rebind the data
-                parentDataGridView.DataSource = dataSet;
-                parentDataGridView.DataMember = parentTableName;
-
-                childDataGridView.DataSource = dataSet;
-                childDataGridView.DataMember = $"{parentTableName}.HabitatAnimals";
-
-                MessageBox.Show("Changes saved successfully!", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                // Refresh the data
+                LoadData();
             }
             catch (Exception ex)
             {

@@ -1,0 +1,168 @@
+{
+  "Scenario": {
+    "Name": "Zoo Management",
+    "Form": {
+      "Caption": "Bioparco Di Roma - Zoo Management",
+      "Width": 800,
+      "Height": 600
+    },
+    "Tables": [
+      {
+        "Name": "Habitat",
+        "Alias": "Master",
+        "Query": "SELECT * FROM Habitat",
+        "KeyColumn": "hid",
+        "Columns": [
+          {
+            "Name": "hid",
+            "DisplayName": "Habitat ID",
+            "Type": "int",
+            "IsPrimaryKey": true,
+            "IsEditable": false
+          },
+          {
+            "Name": "landscape",
+            "DisplayName": "Landscape",
+            "Type": "string",
+            "IsRequired": true
+          },
+          {
+            "Name": "size",
+            "DisplayName": "Size",
+            "Type": "float",
+            "IsRequired": true,
+            "Validation": {
+              "MinValue": 0
+            }
+          },
+          {
+            "Name": "temperature",
+            "DisplayName": "Temperature",
+            "Type": "float",
+            "IsRequired": true,
+            "Validation": {
+              "MinValue": -50,
+              "MaxValue": 50
+            }
+          },
+          {
+            "Name": "humidity",
+            "DisplayName": "Humidity",
+            "Type": "float",
+            "IsRequired": true,
+            "Validation": {
+              "MinValue": 0,
+              "MaxValue": 100
+            }
+          }
+        ]
+      },
+      {
+        "Name": "Animal",
+        "Alias": "Detail",
+        "Query": "SELECT * FROM Animal",
+        "KeyColumn": "aid",
+        "Columns": [
+          {
+            "Name": "aid",
+            "DisplayName": "Animal ID",
+            "Type": "int",
+            "IsPrimaryKey": true,
+            "IsEditable": false
+          },
+          {
+            "Name": "name",
+            "DisplayName": "Name",
+            "Type": "string",
+            "IsRequired": true
+          },
+          {
+            "Name": "species",
+            "DisplayName": "Species",
+            "Type": "string",
+            "IsRequired": true
+          },
+          {
+            "Name": "age",
+            "DisplayName": "Age",
+            "Type": "int",
+            "IsRequired": true,
+            "Validation": {
+              "MinValue": 0,
+              "MaxValue": 100
+            }
+          },
+          {
+            "Name": "gender",
+            "DisplayName": "Gender",
+            "Type": "string",
+            "IsRequired": true,
+            "Validation": {
+              "AllowedValues": ["M", "F"]
+            }
+          },
+          {
+            "Name": "vertebrate_class",
+            "DisplayName": "Vertebrate Class",
+            "Type": "string",
+            "IsRequired": true,
+            "Validation": {
+              "AllowedValues": ["Mammal", "Bird", "Reptile", "Amphibian", "Fish"]
+            }
+          },
+          {
+            "Name": "bodytemperature",
+            "DisplayName": "Body Temperature",
+            "Type": "float",
+            "IsRequired": true,
+            "Validation": {
+              "MinValue": 0,
+              "MaxValue": 50
+            }
+          },
+          {
+            "Name": "weight",
+            "DisplayName": "Weight",
+            "Type": "float",
+            "IsRequired": true,
+            "Validation": {
+              "MinValue": 0
+            }
+          },
+          {
+            "Name": "vid",
+            "DisplayName": "Vet ID",
+            "Type": "int",
+            "IsRequired": true,
+            "Validation": {
+              "MinValue": 1
+            }
+          }
+        ]
+      }
+    ],
+    "Relationships": [
+      {
+        "ParentAlias": "Master",
+        "ChildAlias": "Detail",
+        "ParentKey": "hid",
+        "ChildForeignKey": "hid",
+        "Name": "HabitatAnimals"
+      }
+    ],
+    "CrudProcedures": {
+      "Master": {
+        "Select": "SELECT * FROM Habitat",
+        "Insert": "INSERT INTO Habitat (hid, landscape, size, temperature, humidity) VALUES (@hid, @landscape, @size, @temperature, @humidity)",
+        "Update": "UPDATE Habitat SET landscape = @landscape, size = @size, temperature = @temperature, humidity = @humidity WHERE hid = @hid",
+        "Delete": "DELETE FROM Habitat WHERE hid = @hid"
+      },
+      "Detail": {
+        "Select": "SELECT * FROM Animal",
+        "Insert": "INSERT INTO Animal (aid, name, species, age, gender, vertebrate_class, bodytemperature, weight, vid, hid) VALUES (@aid, @name, @species, @age, @gender, @vertebrate_class, @bodytemperature, @weight, @vid, @hid)",
+        "Update": "UPDATE Animal SET name = @name, species = @species, age = @age, gender = @gender, vertebrate_class = @vertebrate_class, bodytemperature = @bodytemperature, weight = @weight, vid = @vid WHERE aid = @aid",
+        "Delete": "DELETE FROM Animal WHERE aid = @aid"
+      }
+    }
+  }
+} 
