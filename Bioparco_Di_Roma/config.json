@@ -98,7 +98,7 @@
             "Type": "string",
             "IsRequired": true,
             "Validation": {
-              "AllowedValues": ["M", "F"]
+              "AllowedValues": [ "M", "F" ]
             }
           },
           {
@@ -107,13 +107,13 @@
             "Type": "string",
             "IsRequired": true,
             "Validation": {
-              "AllowedValues": ["Mammal", "Bird", "Reptile", "Amphibian", "Fish"]
+              "AllowedValues": [ "Mammal", "Bird", "Reptile", "Amphibian", "Fish" ]
             }
           },
           {
             "Name": "bodytemperature",
             "DisplayName": "Body Temperature",
-            "Type": "float",
+            "Type": "int",
             "IsRequired": true,
             "Validation": {
               "MinValue": 0,
@@ -123,7 +123,7 @@
           {
             "Name": "weight",
             "DisplayName": "Weight",
-            "Type": "float",
+            "Type": "int",
             "IsRequired": true,
             "Validation": {
               "MinValue": 0

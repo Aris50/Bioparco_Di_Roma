@@ -543,7 +543,10 @@ namespace Bioparco_Di_Roma
                             return null;
                         }
 
-                        values[column.Name] = GetControlValue(controls[column.Name], column.Type);
+                        var value = GetControlValue(controls[column.Name], column.Type);
+                        MessageBox.Show($"Debug - ShowInputDialog Value:\nColumn: {column.Name}\nType: {column.Type}\nValue: {value}\nValue Type: {value?.GetType().Name ?? "null"}", 
+                            "Debug Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        values[column.Name] = value;
                     }
 
                     return values;
@@ -614,31 +617,68 @@ namespace Bioparco_Di_Roma
 
         private object GetControlValue(Control control, string type)
         {
-            if (control is TextBox textBox)
+            try
             {
-                if (string.IsNullOrWhiteSpace(textBox.Text))
-                    return null;
-
-                return type.ToLower() switch
+                if (control is TextBox textBox)
                 {
-                    "int" => int.TryParse(textBox.Text, out int intValue) ? intValue : null,
-                    "float" => float.TryParse(textBox.Text, out float floatValue) ? floatValue : null,
-                    "decimal" => decimal.TryParse(textBox.Text, out decimal decimalValue) ? decimalValue : null,
-                    "datetime" => DateTime.TryParse(textBox.Text, out DateTime dateValue) ? dateValue : null,
-                    "bool" => bool.TryParse(textBox.Text, out bool boolValue) ? boolValue : null,
-                    _ => textBox.Text
-                };
-            }
-            else if (control is ComboBox comboBox)
-            {
-                return comboBox.SelectedItem;
-            }
-            else if (control is CheckBox checkBox)
-            {
-                return checkBox.Checked;
-            }
+                    if (string.IsNullOrWhiteSpace(textBox.Text))
+                        return null;
 
-            return null;
+                    string debugInfo = $"Control: TextBox\n" +
+                                     $"Text: {textBox.Text}\n" +
+                                     $"Type: {type}\n" +
+                                     $"Value Type: {textBox.Text.GetType().Name}";
+
+                    object result = type.ToLower() switch
+                    {
+                        "int" => int.TryParse(textBox.Text, out int intValue) ? intValue : null,
+                        "float" => int.TryParse(textBox.Text, out int floatValue) ? floatValue : null,
+                        "decimal" => int.TryParse(textBox.Text, out int decimalValue) ? decimalValue : null,
+                        "datetime" => DateTime.TryParse(textBox.Text, out DateTime dateValue) ? dateValue : null,
+                        "bool" => bool.TryParse(textBox.Text, out bool boolValue) ? boolValue : null,
+                        _ => textBox.Text
+                    };
+
+                    MessageBox.Show($"Debug - GetControlValue Result:\n{debugInfo}\nResult Type: {result?.GetType().Name ?? "null"}\nResult Value: {result}", 
+                        "Debug Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+                    return result;
+                }
+                else if (control is ComboBox comboBox)
+                {
+                    string debugInfo = $"Control: ComboBox\n" +
+                                     $"Selected Item: {comboBox.SelectedItem}\n" +
+                                     $"Type: {type}\n" +
+                                     $"Value Type: {comboBox.SelectedItem?.GetType().Name ?? "null"}";
+
+                    MessageBox.Show($"Debug - GetControlValue Result:\n{debugInfo}", 
+                        "Debug Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+                    return comboBox.SelectedItem;
+                }
+                else if (control is CheckBox checkBox)
+                {
+                    string debugInfo = $"Control: CheckBox\n" +
+                                     $"Checked: {checkBox.Checked}\n" +
+                                     $"Type: {type}\n" +
+                                     $"Value Type: {checkBox.Checked.GetType().Name}";
+
+                    MessageBox.Show($"Debug - GetControlValue Result:\n{debugInfo}", 
+                        "Debug Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+                    return checkBox.Checked;
+                }
+
+                MessageBox.Show($"Debug - GetControlValue: Unknown control type: {control.GetType().Name}", 
+                    "Debug Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return null;
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error in GetControlValue:\n{ex.Message}\n\nStack Trace:\n{ex.StackTrace}", 
+                    "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return null;
+            }
         }
 
         private void AddAnimal()
@@ -748,7 +788,55 @@ namespace Bioparco_Di_Roma
                     rowView.Row.BeginEdit();
                     foreach (var kvp in values)
                     {
-                        rowView.Row[kvp.Key] = kvp.Value ?? DBNull.Value;
+                        try
+                        {
+                            // Get detailed information about the current field
+                            var column = detailTable.Columns.Find(c => c.Name == kvp.Key);
+                            string debugInfo = $"Field: {kvp.Key}\n" +
+                                            $"Column Type: {column?.Type}\n" +
+                                            $"Value Type: {kvp.Value?.GetType().Name ?? "null"}\n" +
+                                            $"Value: {kvp.Value}\n" +
+                                            $"Is Primary Key: {column?.IsPrimaryKey}\n" +
+                                            $"Is Editable: {column?.IsEditable}";
+
+                            if (column != null)
+                            {
+                                if (column.Type.ToLower() == "int")
+                                {
+                                    if (kvp.Value == null)
+                                    {
+                                        rowView.Row[kvp.Key] = DBNull.Value;
+                                    }
+                                    else
+                                    {
+                                        try
+                                        {
+                                            int intValue = Convert.ToInt32(kvp.Value);
+                                            rowView.Row[kvp.Key] = intValue;
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            throw new Exception($"Failed to convert value to int: {ex.Message}\n{debugInfo}");
+                                        }
+                                    }
+                                }
+                                else
+                                {
+                                    rowView.Row[kvp.Key] = kvp.Value ?? DBNull.Value;
+                                }
+                            }
+                            else
+                            {
+                                throw new Exception($"Column configuration not found for field: {kvp.Key}\n{debugInfo}");
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            MessageBox.Show($"Error editing field '{kvp.Key}':\n{ex.Message}", "Field Edit Error", 
+                                MessageBoxButtons.OK, MessageBoxIcon.Error);
+                            rowView.Row.CancelEdit();
+                            return;
+                        }
                     }
                     rowView.Row.EndEdit();
                     SaveChanges();
@@ -756,7 +844,8 @@ namespace Bioparco_Di_Roma
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error editing record: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show($"Error editing record: {ex.Message}\n\nStack Trace:\n{ex.StackTrace}", 
+                    "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
