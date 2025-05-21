@@ -153,13 +153,13 @@
     "CrudProcedures": {
       "Master": {
         "Select": "SELECT * FROM Habitat",
-        "Insert": "INSERT INTO Habitat (hid, landscape, size, temperature, humidity) VALUES (@hid, @landscape, @size, @temperature, @humidity)",
+        "Insert": "INSERT INTO Habitat (landscape, size, temperature, humidity) OUTPUT INSERTED.hid VALUES (@landscape, @size, @temperature, @humidity)",
         "Update": "UPDATE Habitat SET landscape = @landscape, size = @size, temperature = @temperature, humidity = @humidity WHERE hid = @hid",
         "Delete": "DELETE FROM Habitat WHERE hid = @hid"
       },
       "Detail": {
         "Select": "SELECT * FROM Animal",
-        "Insert": "INSERT INTO Animal (aid, name, species, age, gender, vertebrate_class, bodytemperature, weight, vid, hid) VALUES (@aid, @name, @species, @age, @gender, @vertebrate_class, @bodytemperature, @weight, @vid, @hid)",
+        "Insert": "INSERT INTO Animal (name, species, age, gender, vertebrate_class, bodytemperature, weight, vid, hid) OUTPUT INSERTED.aid VALUES (@name, @species, @age, @gender, @vertebrate_class, @bodytemperature, @weight, @vid, @hid)",
         "Update": "UPDATE Animal SET name = @name, species = @species, age = @age, gender = @gender, vertebrate_class = @vertebrate_class, bodytemperature = @bodytemperature, weight = @weight, vid = @vid WHERE aid = @aid",
         "Delete": "DELETE FROM Animal WHERE aid = @aid"
       }

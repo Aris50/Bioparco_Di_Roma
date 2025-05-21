@@ -30,9 +30,6 @@
         {
             parentDataGridView = new DataGridView();
             btnConnect = new Button();
-            btnAddChild = new Button();
-            btnEditChild = new Button();
-            btnDeleteChild = new Button();
             txtConnectionString = new TextBox();
             lblStatus = new Label();
             lblConnectionString = new Label();
@@ -66,33 +63,6 @@
             btnConnect.Text = "Connect";
             btnConnect.UseVisualStyleBackColor = true;
             // 
-            // btnAddChild
-            // 
-            btnAddChild.Location = new Point(93, 71);
-            btnAddChild.Name = "btnAddChild";
-            btnAddChild.Size = new Size(75, 23);
-            btnAddChild.TabIndex = 4;
-            btnAddChild.Text = "Add Animal";
-            btnAddChild.UseVisualStyleBackColor = true;
-            // 
-            // btnEditChild
-            // 
-            btnEditChild.Location = new Point(174, 71);
-            btnEditChild.Name = "btnEditChild";
-            btnEditChild.Size = new Size(75, 23);
-            btnEditChild.TabIndex = 5;
-            btnEditChild.Text = "Edit Animal";
-            btnEditChild.UseVisualStyleBackColor = true;
-            // 
-            // btnDeleteChild
-            // 
-            btnDeleteChild.Location = new Point(255, 71);
-            btnDeleteChild.Name = "btnDeleteChild";
-            btnDeleteChild.Size = new Size(75, 23);
-            btnDeleteChild.TabIndex = 6;
-            btnDeleteChild.Text = "Delete Animal";
-            btnDeleteChild.UseVisualStyleBackColor = true;
-            // 
             // txtConnectionString
             // 
             txtConnectionString.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
@@ -125,18 +95,18 @@
             lblParent.AutoSize = true;
             lblParent.Location = new Point(3, 7);
             lblParent.Name = "lblParent";
-            lblParent.Size = new Size(44, 15);
+            lblParent.Size = new Size(47, 15);
             lblParent.TabIndex = 10;
-            lblParent.Text = "Parent:";
+            lblParent.Text = "Habitats";
             // 
             // lblChild
             // 
             lblChild.AutoSize = true;
             lblChild.Location = new Point(3, 7);
             lblChild.Name = "lblChild";
-            lblChild.Size = new Size(38, 15);
+            lblChild.Size = new Size(47, 15);
             lblChild.TabIndex = 11;
-            lblChild.Text = "Child:";
+            lblChild.Text = "Animals";
             // 
             // splitContainer
             // 
@@ -155,7 +125,7 @@
             splitContainer.Panel2.Controls.Add(lblChild);
             splitContainer.Panel2.Controls.Add(childDataGridView);
             splitContainer.Size = new Size(776, 338);
-            splitContainer.SplitterDistance = 181;
+            splitContainer.SplitterDistance = 169;
             splitContainer.TabIndex = 12;
             // 
             // childDataGridView
@@ -176,9 +146,6 @@
             Controls.Add(lblConnectionString);
             Controls.Add(lblStatus);
             Controls.Add(txtConnectionString);
-            Controls.Add(btnDeleteChild);
-            Controls.Add(btnEditChild);
-            Controls.Add(btnAddChild);
             Controls.Add(btnConnect);
             Name = "Form1";
             Text = "Parent-Child Database Manager";
@@ -202,14 +169,10 @@
             lblStatus.Text = "Ready to connect.";
         }
 
-
         #endregion
 
         private System.Windows.Forms.DataGridView parentDataGridView;
         private System.Windows.Forms.Button btnConnect;
-        private System.Windows.Forms.Button btnAddChild;
-        private System.Windows.Forms.Button btnEditChild;
-        private System.Windows.Forms.Button btnDeleteChild;
         private System.Windows.Forms.TextBox txtConnectionString;
         private System.Windows.Forms.Label lblStatus;
         private System.Windows.Forms.Label lblConnectionString;

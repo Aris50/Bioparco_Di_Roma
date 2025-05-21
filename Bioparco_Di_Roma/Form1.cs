@@ -136,10 +136,13 @@ namespace Bioparco_Di_Roma
         private void SetupEventHandlers()
         {
             btnConnect.Click += BtnConnect_Click;
-            btnAddChild.Click += BtnAddChild_Click;
-            btnEditChild.Click += BtnEditChild_Click;
-            btnDeleteChild.Click += BtnDeleteChild_Click;
             parentDataGridView.SelectionChanged += ParentDataGridView_SelectionChanged;
+            parentDataGridView.CellValueChanged += DataGridView_CellValueChanged;
+            parentDataGridView.UserDeletingRow += DataGridView_UserDeletingRow;
+            parentDataGridView.UserAddedRow += DataGridView_UserAddedRow;
+            childDataGridView.CellValueChanged += DataGridView_CellValueChanged;
+            childDataGridView.UserDeletingRow += DataGridView_UserDeletingRow;
+            childDataGridView.UserAddedRow += DataGridView_UserAddedRow;
         }
 
         private void ApplyFormConfiguration()
@@ -227,6 +230,16 @@ namespace Bioparco_Di_Roma
                 var insertCmd = new SqlCommand(crudConfig.Insert, connection);
                 AddParametersToCommand(insertCmd, table, false);
                 adapter.InsertCommand = insertCmd;
+
+                // Set up the mapping for the output parameter
+                var keyColumn = table.Columns.Find(c => c.IsPrimaryKey);
+                if (keyColumn != null)
+                {
+                    var param = adapter.InsertCommand.Parameters[$"@{keyColumn.Name}"];
+                    param.Direction = ParameterDirection.Output;
+                    param.SourceColumn = keyColumn.Name;
+                    param.SourceVersion = DataRowVersion.Current;
+                }
             }
 
             // Configure Update Command
@@ -235,6 +248,15 @@ namespace Bioparco_Di_Roma
                 var updateCmd = new SqlCommand(crudConfig.Update, connection);
                 AddParametersToCommand(updateCmd, table, true);
                 adapter.UpdateCommand = updateCmd;
+
+                // Ensure primary key parameter is properly mapped for updates
+                var keyColumn = table.Columns.Find(c => c.IsPrimaryKey);
+                if (keyColumn != null)
+                {
+                    var param = adapter.UpdateCommand.Parameters[$"@{keyColumn.Name}"];
+                    param.SourceColumn = keyColumn.Name;
+                    param.SourceVersion = DataRowVersion.Original;
+                }
             }
 
             // Configure Delete Command
@@ -243,6 +265,15 @@ namespace Bioparco_Di_Roma
                 var deleteCmd = new SqlCommand(crudConfig.Delete, connection);
                 AddParametersToCommand(deleteCmd, table, true);
                 adapter.DeleteCommand = deleteCmd;
+
+                // Ensure primary key parameter is properly mapped for deletes
+                var keyColumn = table.Columns.Find(c => c.IsPrimaryKey);
+                if (keyColumn != null)
+                {
+                    var param = adapter.DeleteCommand.Parameters[$"@{keyColumn.Name}"];
+                    param.SourceColumn = keyColumn.Name;
+                    param.SourceVersion = DataRowVersion.Original;
+                }
             }
         }
 
@@ -250,7 +281,8 @@ namespace Bioparco_Di_Roma
         {
             foreach (var column in table.Columns)
             {
-                if (!column.IsEditable && isUpdate) continue;
+                // Skip non-editable columns for updates, but always include primary keys and hid for Animal table
+                if (!column.IsEditable && !column.IsPrimaryKey && !(table.Alias == "Detail" && column.Name == "hid") && isUpdate) continue;
 
                 var parameter = new SqlParameter
                 {
@@ -259,13 +291,34 @@ namespace Bioparco_Di_Roma
                     SourceColumn = column.Name
                 };
 
-                if (isUpdate && column.IsPrimaryKey)
+                if (column.IsPrimaryKey)
                 {
-                    parameter.SourceVersion = DataRowVersion.Original;
+                    if (isUpdate)
+                    {
+                        // For update/delete, use original value and set as Input
+                        parameter.SourceVersion = DataRowVersion.Original;
+                        parameter.Direction = ParameterDirection.Input;
+                    }
+                    else
+                    {
+                        // For insert, set as Output if you want to retrieve the generated key
+                        parameter.Direction = ParameterDirection.Output;
+                    }
                 }
 
                 command.Parameters.Add(parameter);
             }
+        }
+
+        private bool IsForeignKey(string columnName, TableConfig table)
+        {
+            // Check if this column is a foreign key in any relationship
+            if (config.Relationships == null) return false;
+
+            return config.Relationships.Any(r => 
+                (r.ParentAlias == table.Alias && r.ParentKey == columnName) ||
+                (r.ChildAlias == table.Alias && r.ChildForeignKey == columnName)
+            );
         }
 
         private SqlDbType GetSqlDbType(string typeName)
@@ -301,8 +354,9 @@ namespace Bioparco_Di_Roma
         {
             try
             {
-                // Clear existing data
+                // Clear existing data and relationships
                 dataSet.Clear();
+                dataSet.Relations.Clear();
 
                 // Load master data
                 if (masterAdapter != null)
@@ -315,6 +369,25 @@ namespace Bioparco_Di_Roma
                 {
                     detailAdapter.Fill(dataSet, detailTable.Name);
                 }
+
+                // Set primary keys for both tables
+                if (dataSet.Tables.Contains(masterTable.Name))
+                {
+                    var masterTableObj = dataSet.Tables[masterTable.Name];
+                    var masterKeyColumn = masterTableObj.Columns[masterTable.KeyColumn];
+                    masterTableObj.PrimaryKey = new DataColumn[] { masterKeyColumn };
+                }
+
+                if (dataSet.Tables.Contains(detailTable.Name))
+                {
+                    var detailTableObj = dataSet.Tables[detailTable.Name];
+                    var detailKeyColumn = detailTableObj.Columns[detailTable.KeyColumn];
+                    detailTableObj.PrimaryKey = new DataColumn[] { detailKeyColumn };
+                }
+
+                // Configure DataGridViews for editing
+                ConfigureDataGridView(parentDataGridView, masterTable);
+                ConfigureDataGridView(childDataGridView, detailTable);
 
                 // Bind the DataGridViews to the data
                 if (dataSet.Tables.Contains(masterTable.Name))
@@ -359,6 +432,60 @@ namespace Bioparco_Di_Roma
             }
         }
 
+        private void ConfigureDataGridView(DataGridView grid, TableConfig table)
+        {
+            grid.AllowUserToAddRows = true;
+            grid.AllowUserToDeleteRows = true;
+            grid.AllowUserToOrderColumns = true;
+            grid.EditMode = DataGridViewEditMode.EditOnEnter;
+            grid.AutoGenerateColumns = false;
+
+            // Clear existing columns
+            grid.Columns.Clear();
+
+            // Add columns based on configuration
+            foreach (var column in table.Columns)
+            {
+                var gridColumn = new DataGridViewColumn();
+                
+                // Set column type based on data type
+                switch (column.Type.ToLower())
+                {
+                    case "int":
+                    case "float":
+                    case "decimal":
+                        gridColumn = new DataGridViewTextBoxColumn();
+                        break;
+                    case "datetime":
+                        gridColumn = new DataGridViewTextBoxColumn();
+                        break;
+                    case "bool":
+                        gridColumn = new DataGridViewCheckBoxColumn();
+                        break;
+                    default:
+                        if (column.Validation?.AllowedValues != null && column.Validation.AllowedValues.Any())
+                        {
+                            var comboColumn = new DataGridViewComboBoxColumn();
+                            comboColumn.Items.AddRange(column.Validation.AllowedValues.ToArray());
+                            gridColumn = comboColumn;
+                        }
+                        else
+                        {
+                            gridColumn = new DataGridViewTextBoxColumn();
+                        }
+                        break;
+                }
+
+                gridColumn.Name = column.Name;
+                gridColumn.HeaderText = column.DisplayName;
+                gridColumn.DataPropertyName = column.Name;
+                gridColumn.ReadOnly = !column.IsEditable;
+                gridColumn.Visible = true;
+
+                grid.Columns.Add(gridColumn);
+            }
+        }
+
         private void BtnConnect_Click(object sender, EventArgs e)
         {
             try
@@ -394,615 +521,153 @@ namespace Bioparco_Di_Roma
             // No additional code needed here
         }
 
-        private void BtnAddChild_Click(object sender, EventArgs e)
+        private void DataGridView_CellValueChanged(object sender, DataGridViewCellEventArgs e)
         {
-            // Show selection dialog
-            using (Form selectionForm = new Form())
-            {
-                selectionForm.Text = "Select Operation";
-                selectionForm.Size = new System.Drawing.Size(300, 150);
-                selectionForm.StartPosition = FormStartPosition.CenterParent;
-
-                Label lblSelect = new Label { Text = "Select table to add to:", Location = new System.Drawing.Point(20, 20), AutoSize = true };
-                ComboBox cmbTable = new ComboBox { Location = new System.Drawing.Point(20, 50), Width = 240 };
-                cmbTable.Items.AddRange(new string[] { "Animals", "Habitats" });
-
-                Button btnProceed = new Button { Text = "Proceed", Location = new System.Drawing.Point(100, 80), DialogResult = DialogResult.OK };
-                Button btnCancel = new Button { Text = "Cancel", Location = new System.Drawing.Point(200, 80), DialogResult = DialogResult.Cancel };
-
-                selectionForm.Controls.AddRange(new Control[] { lblSelect, cmbTable, btnProceed, btnCancel });
-
-                if (selectionForm.ShowDialog() == DialogResult.OK)
-                {
-                    if (cmbTable.SelectedItem.ToString() == "Animals")
-                    {
-                        AddAnimal();
-                    }
-                    else
-                    {
-                        AddHabitat();
-                    }
-                }
-            }
-        }
-
-        private Dictionary<string, object> ShowInputDialog(TableConfig table, DataRow existingRow = null)
-        {
-            using (Form inputForm = new Form())
-            {
-                inputForm.Text = existingRow == null ? $"Add New {table.Name}" : $"Edit {table.Name}";
-                inputForm.Size = new System.Drawing.Size(400, 600);
-                inputForm.StartPosition = FormStartPosition.CenterParent;
-                inputForm.FormBorderStyle = FormBorderStyle.FixedDialog;
-                inputForm.MaximizeBox = false;
-                inputForm.MinimizeBox = false;
-
-                var controls = new Dictionary<string, Control>();
-                var yPos = 20;
-                var labelWidth = 120;
-                var controlWidth = 200;
-                var spacing = 40;
-
-                // Create controls for each column
-                foreach (var column in table.Columns)
-                {
-                    // Skip if not editable
-                    if (!column.IsEditable && existingRow != null)
-                        continue;
-
-                    // Create label
-                    var label = new Label
-                    {
-                        Text = $"{column.DisplayName}:",
-                        Location = new System.Drawing.Point(20, yPos),
-                        Width = labelWidth,
-                        AutoSize = true
-                    };
-
-                    // Create input control based on column type
-                    Control inputControl;
-                    if (column.Type.ToLower() == "bool")
-                    {
-                        var checkBox = new CheckBox
-                        {
-                            Location = new System.Drawing.Point(150, yPos),
-                            Width = controlWidth,
-                            Checked = existingRow != null ? Convert.ToBoolean(existingRow[column.Name]) : false
-                        };
-                        inputControl = checkBox;
-                    }
-                    else if (column.Validation?.AllowedValues != null && column.Validation.AllowedValues.Any())
-                    {
-                        var comboBox = new ComboBox
-                        {
-                            Location = new System.Drawing.Point(150, yPos),
-                            Width = controlWidth,
-                            DropDownStyle = ComboBoxStyle.DropDownList
-                        };
-                        comboBox.Items.AddRange(column.Validation.AllowedValues.ToArray());
-                        if (existingRow != null)
-                            comboBox.SelectedItem = existingRow[column.Name].ToString();
-                        else if (comboBox.Items.Count > 0)
-                            comboBox.SelectedIndex = 0;
-                        inputControl = comboBox;
-                    }
-                    else
-                    {
-                        var textBox = new TextBox
-                        {
-                            Location = new System.Drawing.Point(150, yPos),
-                            Width = controlWidth,
-                            Text = existingRow != null ? existingRow[column.Name].ToString() : ""
-                        };
-                        inputControl = textBox;
-                    }
-
-                    // Add controls to form
-                    inputForm.Controls.Add(label);
-                    inputForm.Controls.Add(inputControl);
-                    controls[column.Name] = inputControl;
-
-                    yPos += spacing;
-                }
-
-                // Add buttons
-                var btnSave = new Button
-                {
-                    Text = "Save",
-                    DialogResult = DialogResult.OK,
-                    Location = new System.Drawing.Point(150, yPos)
-                };
-
-                var btnCancel = new Button
-                {
-                    Text = "Cancel",
-                    DialogResult = DialogResult.Cancel,
-                    Location = new System.Drawing.Point(250, yPos)
-                };
-
-                inputForm.Controls.Add(btnSave);
-                inputForm.Controls.Add(btnCancel);
-
-                // Handle validation and data collection
-                if (inputForm.ShowDialog() == DialogResult.OK)
-                {
-                    var values = new Dictionary<string, object>();
-                    string errorMessage;
-
-                    foreach (var column in table.Columns)
-                    {
-                        if (!column.IsEditable && existingRow != null)
-                        {
-                            values[column.Name] = existingRow[column.Name];
-                            continue;
-                        }
-
-                        if (!ValidateField(column, controls[column.Name], out errorMessage))
-                        {
-                            MessageBox.Show(errorMessage, "Validation Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                            return null;
-                        }
-
-                        var value = GetControlValue(controls[column.Name], column.Type);
-                        MessageBox.Show($"Debug - ShowInputDialog Value:\nColumn: {column.Name}\nType: {column.Type}\nValue: {value}\nValue Type: {value?.GetType().Name ?? "null"}", 
-                            "Debug Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                        values[column.Name] = value;
-                    }
-
-                    return values;
-                }
-
-                return null;
-            }
-        }
-
-        private bool ValidateField(ColumnConfig column, Control control, out string errorMessage)
-        {
-            errorMessage = string.Empty;
-
-            // Check if required
-            if (column.IsRequired)
-            {
-                if (control is TextBox textBox && string.IsNullOrWhiteSpace(textBox.Text))
-                {
-                    errorMessage = $"{column.DisplayName} is required.";
-                    return false;
-                }
-                if (control is ComboBox comboBox && comboBox.SelectedItem == null)
-                {
-                    errorMessage = $"{column.DisplayName} is required.";
-                    return false;
-                }
-            }
-
-            // Get the value for further validation
-            var value = GetControlValue(control, column.Type);
-            if (value == null && !column.IsRequired)
-                return true;
-
-            // Validate numeric ranges
-            if (column.Validation != null)
-            {
-                if (column.Validation.MinValue.HasValue)
-                {
-                    if (value is IComparable comparable && comparable.CompareTo(column.Validation.MinValue.Value) < 0)
-                    {
-                        errorMessage = $"{column.DisplayName} must be greater than or equal to {column.Validation.MinValue.Value}.";
-                        return false;
-                    }
-                }
-
-                if (column.Validation.MaxValue.HasValue)
-                {
-                    if (value is IComparable comparable && comparable.CompareTo(column.Validation.MaxValue.Value) > 0)
-                    {
-                        errorMessage = $"{column.DisplayName} must be less than or equal to {column.Validation.MaxValue.Value}.";
-                        return false;
-                    }
-                }
-
-                // Validate allowed values
-                if (column.Validation.AllowedValues != null && column.Validation.AllowedValues.Any())
-                {
-                    if (control is ComboBox comboBox && !column.Validation.AllowedValues.Contains(comboBox.SelectedItem?.ToString()))
-                    {
-                        errorMessage = $"{column.DisplayName} must be one of the allowed values.";
-                        return false;
-                    }
-                }
-            }
-
-            return true;
-        }
-
-        private object GetControlValue(Control control, string type)
-        {
-            try
-            {
-                if (control is TextBox textBox)
-                {
-                    if (string.IsNullOrWhiteSpace(textBox.Text))
-                        return null;
-
-                    string debugInfo = $"Control: TextBox\n" +
-                                     $"Text: {textBox.Text}\n" +
-                                     $"Type: {type}\n" +
-                                     $"Value Type: {textBox.Text.GetType().Name}";
-
-                    object result = type.ToLower() switch
-                    {
-                        "int" => int.TryParse(textBox.Text, out int intValue) ? intValue : null,
-                        "float" => int.TryParse(textBox.Text, out int floatValue) ? floatValue : null,
-                        "decimal" => int.TryParse(textBox.Text, out int decimalValue) ? decimalValue : null,
-                        "datetime" => DateTime.TryParse(textBox.Text, out DateTime dateValue) ? dateValue : null,
-                        "bool" => bool.TryParse(textBox.Text, out bool boolValue) ? boolValue : null,
-                        _ => textBox.Text
-                    };
-
-                    MessageBox.Show($"Debug - GetControlValue Result:\n{debugInfo}\nResult Type: {result?.GetType().Name ?? "null"}\nResult Value: {result}", 
-                        "Debug Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
-
-                    return result;
-                }
-                else if (control is ComboBox comboBox)
-                {
-                    string debugInfo = $"Control: ComboBox\n" +
-                                     $"Selected Item: {comboBox.SelectedItem}\n" +
-                                     $"Type: {type}\n" +
-                                     $"Value Type: {comboBox.SelectedItem?.GetType().Name ?? "null"}";
-
-                    MessageBox.Show($"Debug - GetControlValue Result:\n{debugInfo}", 
-                        "Debug Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
-
-                    return comboBox.SelectedItem;
-                }
-                else if (control is CheckBox checkBox)
-                {
-                    string debugInfo = $"Control: CheckBox\n" +
-                                     $"Checked: {checkBox.Checked}\n" +
-                                     $"Type: {type}\n" +
-                                     $"Value Type: {checkBox.Checked.GetType().Name}";
-
-                    MessageBox.Show($"Debug - GetControlValue Result:\n{debugInfo}", 
-                        "Debug Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
-
-                    return checkBox.Checked;
-                }
-
-                MessageBox.Show($"Debug - GetControlValue: Unknown control type: {control.GetType().Name}", 
-                    "Debug Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return null;
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Error in GetControlValue:\n{ex.Message}\n\nStack Trace:\n{ex.StackTrace}", 
-                    "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                return null;
-            }
-        }
-
-        private void AddAnimal()
-        {
-            if (parentDataGridView.CurrentRow == null)
-            {
-                MessageBox.Show("Please select a habitat first.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
+            if (e.RowIndex < 0) return; // Header row
 
             try
             {
-                // Get the selected habitat
-                DataRowView habitatRow = (DataRowView)parentDataGridView.CurrentRow.DataBoundItem;
-                int habitatId = Convert.ToInt32(habitatRow[masterTable.KeyColumn]);
-
-                var values = ShowInputDialog(detailTable);
-                if (values != null)
+                if (sender is DataGridView grid) // Use pattern matching to ensure 'grid' is in scope
                 {
-                    // Add the foreign key value
-                    values[detailTable.KeyColumn] = habitatId;
+                    var table = grid == parentDataGridView ? masterTable : detailTable;
+                    var row = grid.Rows[e.RowIndex].DataBoundItem as DataRowView;
 
-                    // Create new row
-                    DataRow newRow = dataSet.Tables[detailTable.Name].NewRow();
-                    foreach (var kvp in values)
+                    if (row == null) return;
+
+                    // Validate the changed value
+                    var column = table.Columns[e.ColumnIndex];
+                    var value = row[column.Name];
+
+                    if (column.IsRequired && (value == null || value == DBNull.Value))
                     {
-                        newRow[kvp.Key] = kvp.Value ?? DBNull.Value;
+                        MessageBox.Show($"{column.DisplayName} is required.", "Validation Error",
+                            MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        row.Row.CancelEdit();
+                        return;
                     }
-                    dataSet.Tables[detailTable.Name].Rows.Add(newRow);
+
+                    if (column.Validation != null)
+                    {
+                        if (column.Validation.MinValue.HasValue && value != null && value != DBNull.Value)
+                        {
+                            if (Convert.ToDouble(value) < column.Validation.MinValue.Value)
+                            {
+                                MessageBox.Show($"{column.DisplayName} must be greater than or equal to {column.Validation.MinValue.Value}.",
+                                    "Validation Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                                row.Row.CancelEdit();
+                                return;
+                            }
+                        }
+
+                        if (column.Validation.MaxValue.HasValue && value != null && value != DBNull.Value)
+                        {
+                            if (Convert.ToDouble(value) > column.Validation.MaxValue.Value)
+                            {
+                                MessageBox.Show($"{column.DisplayName} must be less than or equal to {column.Validation.MaxValue.Value}.",
+                                    "Validation Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                                row.Row.CancelEdit();
+                                return;
+                            }
+                        }
+
+                        if (column.Validation.AllowedValues != null && column.Validation.AllowedValues.Any())
+                        {
+                            if (!column.Validation.AllowedValues.Contains(value?.ToString()))
+                            {
+                                MessageBox.Show($"{column.DisplayName} must be one of: {string.Join(", ", column.Validation.AllowedValues)}",
+                                    "Validation Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                                row.Row.CancelEdit();
+                            return;
+                            }
+                        }
+                    }
+
+                    // End the edit and save changes
+                    row.Row.EndEdit();
                     SaveChanges();
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error adding record: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-        }
-
-        private void AddHabitat()
-        {
-            try
-            {
-                var values = ShowInputDialog(masterTable);
-                if (values != null)
+                MessageBox.Show($"Error updating value: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                if (sender is DataGridView grid)
                 {
-                    DataRow newRow = dataSet.Tables[masterTable.Name].NewRow();
-                    foreach (var kvp in values)
+                    var row = grid.Rows[e.RowIndex].DataBoundItem as DataRowView;
+                    if (row != null)
                     {
-                        newRow[kvp.Key] = kvp.Value ?? DBNull.Value;
-                    }
-                    dataSet.Tables[masterTable.Name].Rows.Add(newRow);
-                    SaveChanges();
-                }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Error adding record: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-        }
-
-        private void BtnEditChild_Click(object sender, EventArgs e)
-        {
-            // Show selection dialog
-            using (Form selectionForm = new Form())
-            {
-                selectionForm.Text = "Select Operation";
-                selectionForm.Size = new System.Drawing.Size(300, 150);
-                selectionForm.StartPosition = FormStartPosition.CenterParent;
-
-                Label lblSelect = new Label { Text = "Select table to edit:", Location = new System.Drawing.Point(20, 20), AutoSize = true };
-                ComboBox cmbTable = new ComboBox { Location = new System.Drawing.Point(20, 50), Width = 240 };
-                cmbTable.Items.AddRange(new string[] { "Animals", "Habitats" });
-
-                Button btnProceed = new Button { Text = "Proceed", Location = new System.Drawing.Point(100, 80), DialogResult = DialogResult.OK };
-                Button btnCancel = new Button { Text = "Cancel", Location = new System.Drawing.Point(200, 80), DialogResult = DialogResult.Cancel };
-
-                selectionForm.Controls.AddRange(new Control[] { lblSelect, cmbTable, btnProceed, btnCancel });
-
-                if (selectionForm.ShowDialog() == DialogResult.OK)
-                {
-                    if (cmbTable.SelectedItem.ToString() == "Animals")
-                    {
-                        EditAnimal();
-                    }
-                    else
-                    {
-                        EditHabitat();
+                        row.Row.CancelEdit();
                     }
                 }
             }
         }
 
-        private void EditAnimal()
+        private void DataGridView_UserDeletingRow(object sender, DataGridViewRowCancelEventArgs e)
         {
-            if (childDataGridView.CurrentRow == null)
-            {
-                MessageBox.Show("Please select a record to edit.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
-
             try
             {
-                DataRowView rowView = (DataRowView)childDataGridView.CurrentRow.DataBoundItem;
-                var values = ShowInputDialog(detailTable, rowView.Row);
-                if (values != null)
-                {
-                    rowView.Row.BeginEdit();
-                    foreach (var kvp in values)
-                    {
-                        try
-                        {
-                            // Get detailed information about the current field
-                            var column = detailTable.Columns.Find(c => c.Name == kvp.Key);
-                            string debugInfo = $"Field: {kvp.Key}\n" +
-                                            $"Column Type: {column?.Type}\n" +
-                                            $"Value Type: {kvp.Value?.GetType().Name ?? "null"}\n" +
-                                            $"Value: {kvp.Value}\n" +
-                                            $"Is Primary Key: {column?.IsPrimaryKey}\n" +
-                                            $"Is Editable: {column?.IsEditable}";
+                var grid = sender as DataGridView;
+                var table = grid == parentDataGridView ? masterTable : detailTable;
+                var row = e.Row.DataBoundItem as DataRowView;
 
-                            if (column != null)
-                            {
-                                if (column.Type.ToLower() == "int")
-                                {
-                                    if (kvp.Value == null)
-                                    {
-                                        rowView.Row[kvp.Key] = DBNull.Value;
-                                    }
-                                    else
-                                    {
-                                        try
-                                        {
-                                            int intValue = Convert.ToInt32(kvp.Value);
-                                            rowView.Row[kvp.Key] = intValue;
-                                        }
-                                        catch (Exception ex)
-                                        {
-                                            throw new Exception($"Failed to convert value to int: {ex.Message}\n{debugInfo}");
-                                        }
-                                    }
-                                }
-                                else
-                                {
-                                    rowView.Row[kvp.Key] = kvp.Value ?? DBNull.Value;
-                                }
-                            }
-                            else
-                            {
-                                throw new Exception($"Column configuration not found for field: {kvp.Key}\n{debugInfo}");
-                            }
-                        }
-                        catch (Exception ex)
+                if (row == null) return;
+
+                // For habitats, check if there are any animals
+                if (grid == parentDataGridView)
+                {
+                    var habitatId = Convert.ToInt32(row[masterTable.KeyColumn]);
+                    var animals = dataSet.Tables[detailTable.Name].Select($"{masterTable.KeyColumn} = {habitatId}");
+                    
+                    if (animals.Length > 0)
+                    {
+                        if (MessageBox.Show("This habitat contains animals. Deleting it will also delete all animals in it. Continue?", 
+                            "Confirm Delete", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
                         {
-                            MessageBox.Show($"Error editing field '{kvp.Key}':\n{ex.Message}", "Field Edit Error", 
-                                MessageBoxButtons.OK, MessageBoxIcon.Error);
-                            rowView.Row.CancelEdit();
+                            e.Cancel = true;
                             return;
                         }
                     }
-                    rowView.Row.EndEdit();
-                    SaveChanges();
                 }
+
+                // Delete the row and save changes
+                row.Row.Delete();
+                SaveChanges();
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error editing record: {ex.Message}\n\nStack Trace:\n{ex.StackTrace}", 
-                    "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show($"Error deleting row: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                e.Cancel = true;
             }
         }
 
-        private void EditHabitat()
-        {
-            if (parentDataGridView.CurrentRow == null)
-            {
-                MessageBox.Show("Please select a record to edit.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
-
-            try
-            {
-                DataRowView rowView = (DataRowView)parentDataGridView.CurrentRow.DataBoundItem;
-                var values = ShowInputDialog(masterTable, rowView.Row);
-                if (values != null)
-                {
-                    rowView.Row.BeginEdit();
-                    foreach (var kvp in values)
-                    {
-                        rowView.Row[kvp.Key] = kvp.Value ?? DBNull.Value;
-                    }
-                    rowView.Row.EndEdit();
-                    SaveChanges();
-                }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Error editing record: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-        }
-
-        private void BtnDeleteChild_Click(object sender, EventArgs e)
-        {
-            // Show selection dialog
-            using (Form selectionForm = new Form())
-            {
-                selectionForm.Text = "Select Operation";
-                selectionForm.Size = new System.Drawing.Size(300, 150);
-                selectionForm.StartPosition = FormStartPosition.CenterParent;
-
-                Label lblSelect = new Label { Text = "Select table to delete from:", Location = new System.Drawing.Point(20, 20), AutoSize = true };
-                ComboBox cmbTable = new ComboBox { Location = new System.Drawing.Point(20, 50), Width = 240 };
-                cmbTable.Items.AddRange(new string[] { "Animals", "Habitats" });
-
-                Button btnProceed = new Button { Text = "Proceed", Location = new System.Drawing.Point(100, 80), DialogResult = DialogResult.OK };
-                Button btnCancel = new Button { Text = "Cancel", Location = new System.Drawing.Point(200, 80), DialogResult = DialogResult.Cancel };
-
-                selectionForm.Controls.AddRange(new Control[] { lblSelect, cmbTable, btnProceed, btnCancel });
-
-                if (selectionForm.ShowDialog() == DialogResult.OK)
-                {
-                    if (cmbTable.SelectedItem.ToString() == "Animals")
-                    {
-                        DeleteAnimal();
-                    }
-                    else
-                    {
-                        DeleteHabitat();
-                    }
-                }
-            }
-        }
-
-        private void DeleteAnimal()
+        private void DataGridView_UserAddedRow(object sender, DataGridViewRowEventArgs e)
         {
             try
             {
-                // Create input form
-                using (Form inputForm = new Form())
+                var grid = sender as DataGridView;
+                var table = grid == parentDataGridView ? masterTable : detailTable;
+                var row = e.Row.DataBoundItem as DataRowView;
+
+                if (row == null) return;
+
+                // For animals, set the habitat ID if a habitat is selected
+                if (grid == childDataGridView && parentDataGridView.CurrentRow != null)
                 {
-                    inputForm.Text = "Delete Animal";
-                    inputForm.Size = new System.Drawing.Size(300, 150);
-                    inputForm.StartPosition = FormStartPosition.CenterParent;
-
-                    // Create input controls
-                    Label lblAid = new Label { Text = "Animal ID:", Location = new System.Drawing.Point(20, 20), AutoSize = true };
-                    TextBox txtAid = new TextBox { Location = new System.Drawing.Point(120, 20), Width = 150 };
-
-                    Button btnSubmit = new Button { Text = "Delete", Location = new System.Drawing.Point(100, 80), DialogResult = DialogResult.OK };
-                    Button btnCancel = new Button { Text = "Cancel", Location = new System.Drawing.Point(200, 80), DialogResult = DialogResult.Cancel };
-
-                    // Add controls to form
-                    inputForm.Controls.AddRange(new Control[] { lblAid, txtAid, btnSubmit, btnCancel });
-
-                    if (inputForm.ShowDialog() == DialogResult.OK)
-                    {
-                        int animalId = Convert.ToInt32(txtAid.Text);
-                        DataRow[] rows = dataSet.Tables[detailTable.Name].Select($"aid = {animalId}");
-
-                        if (rows.Length > 0)
-                        {
-                            if (MessageBox.Show("Are you sure you want to delete this animal?", "Confirm Delete", 
-                                MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
-                            {
-                                rows[0].Delete();
-                                SaveChanges();
-                            }
-                        }
-                        else
-                        {
-                            MessageBox.Show("Animal ID not found.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                        }
-                    }
+                    var habitatId = Convert.ToInt32(((DataRowView)parentDataGridView.CurrentRow.DataBoundItem)[masterTable.KeyColumn]);
+                    row[masterTable.KeyColumn] = habitatId;
                 }
+
+                // End the edit and save changes
+                row.Row.EndEdit();
+                SaveChanges();
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error deleting animal: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-        }
-
-        private void DeleteHabitat()
-        {
-            try
-            {
-                // Create input form
-                using (Form inputForm = new Form())
+                MessageBox.Show($"Error adding row: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                var row = e.Row.DataBoundItem as DataRowView;
+                if (row != null)
                 {
-                    inputForm.Text = "Delete Habitat";
-                    inputForm.Size = new System.Drawing.Size(300, 150);
-                    inputForm.StartPosition = FormStartPosition.CenterParent;
-
-                    // Create input controls
-                    Label lblHid = new Label { Text = "Habitat ID:", Location = new System.Drawing.Point(20, 20), AutoSize = true };
-                    TextBox txtHid = new TextBox { Location = new System.Drawing.Point(120, 20), Width = 150 };
-
-                    Button btnSubmit = new Button { Text = "Delete", Location = new System.Drawing.Point(100, 80), DialogResult = DialogResult.OK };
-                    Button btnCancel = new Button { Text = "Cancel", Location = new System.Drawing.Point(200, 80), DialogResult = DialogResult.Cancel };
-
-                    // Add controls to form
-                    inputForm.Controls.AddRange(new Control[] { lblHid, txtHid, btnSubmit, btnCancel });
-
-                    if (inputForm.ShowDialog() == DialogResult.OK)
-                    {
-                        int habitatId = Convert.ToInt32(txtHid.Text);
-                        DataRow[] rows = dataSet.Tables[masterTable.Name].Select($"hid = {habitatId}");
-
-                        if (rows.Length > 0)
-                        {
-                            if (MessageBox.Show("Are you sure you want to delete this habitat? This will also delete all animals in this habitat.", "Confirm Delete", 
-                                MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
-                            {
-                                rows[0].Delete();
-                                SaveChanges();
-                            }
-                        }
-                        else
-                        {
-                            MessageBox.Show("Habitat ID not found.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                        }
-                    }
+                    row.Row.CancelEdit();
                 }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Error deleting habitat: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -1022,12 +687,16 @@ namespace Bioparco_Di_Roma
                     detailAdapter.Update(dataSet, detailTable.Name);
                 }
 
-                // Refresh the data
+                // Only reload if there were actual changes
+                if (dataSet.HasChanges())
+                {
                 LoadData();
+                }
             }
             catch (Exception ex)
             {
                 MessageBox.Show($"Error saving changes: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                LoadData(); // Reload only on error to revert changes
             }
         }
     }
