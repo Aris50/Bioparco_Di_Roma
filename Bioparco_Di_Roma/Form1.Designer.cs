@@ -62,8 +62,7 @@
             btnConnect.TabIndex = 2;
             btnConnect.Text = "Connect";
             btnConnect.UseVisualStyleBackColor = true;
-            // 
-            // txtConnectionString
+            // git 
             // 
             txtConnectionString.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             txtConnectionString.Location = new Point(12, 25);
